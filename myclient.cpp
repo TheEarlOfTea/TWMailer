@@ -9,23 +9,24 @@
 #include <iostream>
 ///////////////////////////////////////////////////////////////////////////////
 #define PORT 6543
-
 #define MAX_SUBJ 80;
 #define BUF 1024;
 #define MAX_NAME 8;
 #define SEPERATOR ";";
-
 #define CORRECT_SERVER_RESPONSE "OK";
 
 using namespace std;
 
+//functions and variables in auxillary are used in namespace client_functions
 namespace auxilliary{
     string seperator= SEPERATOR;
+    //calculate max. Message size
     unsigned int max_name=MAX_NAME;
     unsigned int max_subj= MAX_SUBJ;
     unsigned int buffer= BUF;
     unsigned int max_msg= buffer - max_subj-(2*max_name)-1;
 
+    //checks is input name is viable
     bool isNameOk(string name){
         if(name.length()>max_name){
             cout<<"Given name is to long\n";
@@ -35,6 +36,7 @@ namespace auxilliary{
             cout<<"Entered empty name\n";
             return false;
         }
+        //checks for illegal characters in name
         for(char c : name){
             if (!std::isalpha(c) && !std::isdigit(c)){
                 cout<<"Given name contains illegal characters\n";
@@ -44,6 +46,7 @@ namespace auxilliary{
         return true;
 
     }
+    //checks if subject is not longer than max_subj characters
     bool isSubjectOk(string subject){
         if(subject.length()> max_subj){
             printf("Subject may only be up to %i characters long;\nInput Subject-length was: %li\n", max_subj, subject.length());
@@ -51,7 +54,8 @@ namespace auxilliary{
         }
         return true;
     }
-    
+
+    //checks if message is not longer than max_msg characters
     bool isMessageOk(string message){
         if(message.length()> max_msg){
             printf("Message may only be up to %i characters long;\nInput Message-length was: %li\n", max_msg, message.length());
@@ -60,6 +64,7 @@ namespace auxilliary{
         return true;
     }
     
+    //checks if number is neither empty nor contains non digits
     bool isNumberOk(string number){
         if(number.length()<=0){
             cout<<"No number was put in\n";
@@ -71,17 +76,18 @@ namespace auxilliary{
                 return false;
             }
         }
-        if(stoi(number)<=0){
-            cout<<"Input Number must be higher than 0\n";
-            return false;
-        }
         return true;
     }
 }
 
+//contains the 4 main functions send, list, read and del
 namespace client_functions{
     using namespace auxilliary;
 
+    /**
+     * @brief creates a package, that sends the server a message
+     * @return a string in the format "s;$sender;$receiver;$subject;$message"
+     */
     string send(){
         string sender, receiver, subject, message, hs, package;
         do{
@@ -112,7 +118,10 @@ namespace client_functions{
         package="s"+seperator+sender+seperator+receiver+seperator+subject+seperator+message;
         return package;
     }
-    
+    /**
+     * @brief creates package, that asks the server for all messages of a user
+     * @return a string in the format "l;$username"
+     */
     string list(){
         string username, package;
         do{
@@ -124,8 +133,12 @@ namespace client_functions{
         return package;
     }
 
+    /**
+     * @brief creates package, that asks the server for a specified message of user
+     * @return a string in the format "r;$username;$msg_number"
+     */
     string read(){
-        string username, package, msg_number;
+        string username, msg_number, package;
         do{
             cout<<"<Username>: ";
             getline(cin, username);
@@ -140,6 +153,10 @@ namespace client_functions{
 
     }
 
+    /**
+     * @brief creates package, that asks the server to delete a specified message of a user
+     * @return a string in the format "d;$username;$msg_number"
+     */
     string del(){
         string username, package, msg_number;
         do{
@@ -163,36 +180,39 @@ using namespace client_functions;
 int main(int argc, char **argv){
 
     const size_t BUFFER_SIZE= BUF;
-    int create_socket;
+    int client_socket;
     char buffer[buffer];
     struct sockaddr_in address;
     int size;
     bool isQuit, isEntryCorrect;
     string hs;
 
-    if((create_socket= socket(AF_INET, SOCK_STREAM, 0))==-1){
+    if((client_socket= socket(AF_INET, SOCK_STREAM, 0))==-1){
         perror("Fehler beim erstellen des Sockets");
         exit(EXIT_FAILURE);
     }
 
     memset(&address, 0, sizeof(address));
     address.sin_family= AF_INET;
-
+//ARGUMENT HANDLING
     if (argv[1]==NULL || argv[2]==NULL){
 
         inet_aton("127.0.0.1", &address.sin_addr);
         address.sin_port= htons(PORT);
     }
     else{
+        //checks if given ip-address is viable
         if(inet_pton(AF_INET, argv[1], &address.sin_addr)==0){
             cout<<"Input IP-address is not valid\n";
             exit(EXIT_FAILURE);
         }
         try{
+            //checks if port is in suitable range
             if(stoi(argv[2])<1024 || stoi(argv[2])>65535){
             cout<<"Input Port is not in usable port range\n";
             exit(EXIT_FAILURE);
         }
+        //exits, if input port is NAN
         }catch(invalid_argument e1){
             cout<<"Port was not a number\n";
             exit(EXIT_FAILURE);
@@ -201,14 +221,14 @@ int main(int argc, char **argv){
 
     }
 
-    if(connect(create_socket, (struct sockaddr *)&address, sizeof(address))==-1){
+    if(connect(client_socket, (struct sockaddr *)&address, sizeof(address))==-1){
         perror("Server konnte nicht erreicht werden");
         exit(EXIT_FAILURE);
     }
     printf("Connection with server (%s) established\n",
         inet_ntoa(address.sin_addr));
 
-    size= recv(create_socket, buffer, BUFFER_SIZE-1, 0);
+    size= recv(client_socket, buffer, BUFFER_SIZE-1, 0);
     switch(size){
         case -1:
             perror("recv error");
@@ -218,7 +238,7 @@ int main(int argc, char **argv){
             break;
         default:
             buffer[size] = '\0';
-            printf("%s", buffer); // ignore error
+            printf("%s", buffer);
     }
 
     do{
@@ -235,6 +255,7 @@ int main(int argc, char **argv){
                 buffer[size] = 0;
             }
 
+            //checks for any suitable commands
             if(strcasecmp(buffer,"send")==0){
                 hs=send();
                 isEntryCorrect=true;
@@ -259,17 +280,19 @@ int main(int argc, char **argv){
 
             
             isQuit = strcmp(buffer, "quit") == 0;
+            //if a suitable command is found
             if(isEntryCorrect){
                 
+                //copies string from hs into buffer
                 strcpy(buffer,hs.c_str());
                 size=strlen(buffer);
-                if(send(create_socket, buffer, size, 0)==-1){
+                if(send(client_socket, buffer, size, 0)==-1){
 
                     perror("An error weil sending data occured");
                     break;
 
                 }
-                size = recv(create_socket, buffer, BUFFER_SIZE-1, 0);
+                size = recv(client_socket, buffer, BUFFER_SIZE-1, 0);
                 if (size == -1){
                     perror("recv error");
                     break;
@@ -289,16 +312,16 @@ int main(int argc, char **argv){
             }         
         }
     }while (!isQuit);
-    if (create_socket != -1){
-      if (shutdown(create_socket, SHUT_RDWR) == -1){
+    if (client_socket != -1){
+      if (shutdown(client_socket, SHUT_RDWR) == -1){
 
          perror("shutdown create_socket"); 
       }
-      if (close(create_socket) == -1){
+      if (close(client_socket) == -1){
 
          perror("close create_socket");
       }
-      create_socket = -1;
+      client_socket = -1;
    }
 
    return EXIT_SUCCESS;
