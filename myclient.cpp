@@ -178,21 +178,33 @@ int main(int argc, char **argv){
     memset(&address, 0, sizeof(address));
     address.sin_family= AF_INET;
 
-    if (argc < 2){
+    if (argv[1]==NULL || argv[2]==NULL){
 
         inet_aton("127.0.0.1", &address.sin_addr);
         address.sin_port= htons(PORT);
     }
     else{
-        inet_aton(argv[1], &address.sin_addr);
-        //TODO Port conversion
+        if(inet_pton(AF_INET, argv[1], &address.sin_addr)==0){
+            cout<<"Input IP-address is not valid\n";
+            exit(EXIT_FAILURE);
+        }
+        try{
+            if(stoi(argv[2])<1024 || stoi(argv[2])>65535){
+            cout<<"Input Port is not in usable port range\n";
+            exit(EXIT_FAILURE);
+        }
+        }catch(invalid_argument e1){
+            cout<<"Port was not a number\n";
+            exit(EXIT_FAILURE);
+        }
+        address.sin_port=htons(stoi(argv[2]));
+
     }
 
     if(connect(create_socket, (struct sockaddr *)&address, sizeof(address))==-1){
         perror("Server konnte nicht erreicht werden");
         exit(EXIT_FAILURE);
     }
-
     printf("Connection with server (%s) established\n",
         inet_ntoa(address.sin_addr));
 
@@ -240,6 +252,7 @@ int main(int argc, char **argv){
                 isEntryCorrect=true;
             }
             else{
+                cout<<">>Command not found\n";
                 isEntryCorrect=false;
             }
 
