@@ -173,6 +173,47 @@ namespace client_functions{
 
 
     }
+    /**
+     * @brief displays a subject list
+     * @param s string of format "OK;$NrOfSubjects;$Subject1;$Subject2;...;$SubjectN"
+     * @return returns true on sucess or false on server-site error
+     **/
+    bool printList(string s){
+        //cuts OK from string
+        char buffer[1024];
+        strcpy(buffer, s.c_str());
+        string hs=strtok(buffer, ";");
+        cout<<hs<<"\n";
+        //prints Subject list
+        if(strcmp(hs.c_str(),"OK")==0){
+            hs=strtok(NULL,";");
+            for(int i=1; i<=stoi(hs); i++){
+                printf("<Message - Nr.> %i; <Subject> %s\n", i, strtok(NULL,";"));
+            }
+            return true;
+        }
+        cerr<<"A server-site error occured\n";
+        return false;
+    }
+    /**
+     * @brief displays a message
+     * @param s string of format "OK;$Message"
+     * @return returns true on sucess or false on server-site error
+     **/
+    bool printMessage(string s){ 
+        //cuts OK from string
+        char buffer[1024];
+        strcpy(buffer, s.c_str());
+        string hs=strtok(buffer, ";");
+        cout<<hs<<"\n";
+        //prints Message
+        if(strcmp(hs.c_str(),"OK")==0){
+            cout<<strtok(NULL,";")<<"\n";
+            return true;;
+        }
+        cerr<<"A server-site error occured\n";
+        return false;
+    }
 
 }
 using namespace client_functions;
@@ -185,6 +226,8 @@ int main(int argc, char **argv){
     struct sockaddr_in address;
     int size;
     bool isQuit, isEntryCorrect;
+    bool isList= false;
+    bool isMessage=false;
     string hs;
 
     if((client_socket= socket(AF_INET, SOCK_STREAM, 0))==-1){
@@ -263,10 +306,12 @@ int main(int argc, char **argv){
             else if(strcasecmp(buffer,"list")==0){
                 hs=list();
                 isEntryCorrect=true;
+                isList=true;
             }
             else if(strcasecmp(buffer,"read")==0){
                 hs=read();
                 isEntryCorrect=true;
+                isMessage=true;
             }
             else if(strcasecmp(buffer,"del")==0){
                 hs=del();
@@ -283,7 +328,7 @@ int main(int argc, char **argv){
             //if a suitable command is found
             if(isEntryCorrect){
                 
-                //copies string from hs into buffer
+                //copies package from hs into buffer
                 strcpy(buffer,hs.c_str());
                 size=strlen(buffer);
                 if(send(client_socket, buffer, size, 0)==-1){
@@ -292,6 +337,7 @@ int main(int argc, char **argv){
                     break;
 
                 }
+                //waits for response
                 size = recv(client_socket, buffer, BUFFER_SIZE-1, 0);
                 if (size == -1){
                     perror("recv error");
@@ -302,7 +348,25 @@ int main(int argc, char **argv){
                     break;
                 }
                 else{
+                    //either just prints out OK or ERR, or displays a subject list / Message
                     buffer[size] = '\0';
+                    if(isList){
+                        if(!printList(buffer)){
+                            fprintf(stderr, "<< Server error occured, abort\n");
+                            break;
+                        }
+                        isList=false;
+                    }
+                    else if(isMessage){
+                        if(!printMessage(buffer)){
+                            fprintf(stderr, "<< Server error occured, abort\n");
+                            break;
+                        }
+                        isMessage=false;
+                    }
+                    else{
+
+                    }
                     printf("<< %s\n", buffer); // ignore error
                     if (strcmp("OK", buffer) != 0){
                     fprintf(stderr, "<< Server error occured, abort\n");
