@@ -15,8 +15,12 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #define BUF 1024
-#define PORT 6543
+/* the number of files the user has received is stored in a file in their directory named numOfFiles */
+#define COUNTERFILENAME "numOfFiles.txt" 
+// #define PORT 6543
 #define SEPERATOR ";"
+#define MAX_NAME 8
+#define MAX_SUBJ 80
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -29,7 +33,7 @@ namespace fs = std::filesystem;
 ///////////////////////////////////////////////////////////////////////////////
 
 void *clientCommunication(void *data, string folder);
-void receiveFromClient(string buffer, string folder);
+bool receiveFromClient(string buffer, string folder);
 string list(string buffer, string folder);
 string read(string buffer, string folder);
 bool deleteMessage(string buffer, string folder);
@@ -41,19 +45,24 @@ int getNumOfFiles(string folder);
 string getHighestFileNumber(string folder);
 string getString(string buffer);
 string removeString(string buffer, string s1);
+bool verifyStringLength(string string, int maxStringLength);
 
 
 ///////////////////////////////////////////////////////////////////////////////
 
-
+/**
+ * @brief Server for basic tw-mailer. Responds to commands from the client, can save a message in the receiver's repository,
+ * list the number of messages in the user's inbox and their subjects, read the content of a given message and delete messages
+ * 
+ */
 int main(int argc, char* argv[])
 {
    /* ARGUMENT HANDLING */
-   if(argc == 1 || argc >= 3) { /* TODO: change to four when I figure out this whole PORT thing */
+   if(argc != 3) { 
       printUsage();
    }
 
-   string folder = argv[1]; /* TODO: change to two when yk port thing */
+   string folder = argv[2];
 
    try {
       if (!fs::is_directory(folder)) { /* given persistence folder does not exist and needs to be created */
@@ -66,39 +75,25 @@ int main(int argc, char* argv[])
    }
 
    /* END OF ARGUMENT HANDLING */
-   
-
 
    socklen_t addrlen;
    struct sockaddr_in address, cliaddress;
    int reuseValue = 1;
    
 
-   ////////////////////////////////////////////////////////////////////////////
-   // SIGNAL HANDLER
-   // SIGINT (Interrup: ctrl+c)
-   // https://man7.org/linux/man-pages/man2/signal.2.html
+   /* SIGNAL HANDLER SIGINT (Interrupt: ctrl+c) */
    if (signal(SIGINT, signalHandler) == SIG_ERR) {
       perror("signal can not be registered");
       return EXIT_FAILURE;
    }
 
-   ////////////////////////////////////////////////////////////////////////////
-   // CREATE A SOCKET
-   // https://man7.org/linux/man-pages/man2/socket.2.html
-   // https://man7.org/linux/man-pages/man7/ip.7.html
-   // https://man7.org/linux/man-pages/man7/tcp.7.html
-   // IPv4, TCP (connection oriented), IP (same as client)
+   /* CREATE A SOCKET IPv4, TCP (connection oriented), IP (same as client) */
    if ((create_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
       perror("Socket error"); // errno set by socket()
       return EXIT_FAILURE;
    }
 
-   ////////////////////////////////////////////////////////////////////////////
-   // SET SOCKET OPTIONS
-   // https://man7.org/linux/man-pages/man2/setsockopt.2.html
-   // https://man7.org/linux/man-pages/man7/socket.7.html
-   // socket, level, optname, optvalue, optlen
+   /* SET SOCKET OPTIONS socket, level, optname, optvalue, optlen */
    if (setsockopt(create_socket,
                   SOL_SOCKET,
                   SO_REUSEADDR,
@@ -117,24 +112,32 @@ int main(int argc, char* argv[])
       return EXIT_FAILURE;
    }
 
-   ////////////////////////////////////////////////////////////////////////////
-   // INIT ADDRESS
-   // Attention: network byte order => big endian
+   /* INIT ADDRESS Attention: network byte order => big endian */
    memset(&address, 0, sizeof(address));
    address.sin_family = AF_INET;
    address.sin_addr.s_addr = INADDR_ANY;
-   address.sin_port = htons(PORT);
 
-   ////////////////////////////////////////////////////////////////////////////
-   // ASSIGN AN ADDRESS WITH PORT TO SOCKET
+   try {
+      /* checks if port is in suitable range */
+      if(stoi(argv[1]) < 1024 || stoi(argv[1]) > 65535) {
+         cerr << "Input Port is not in usable port range" << endl;
+         exit(EXIT_FAILURE);
+     }
+     
+   } catch (invalid_argument e1) { /* exits, if input port is NAN */
+      cerr <<"Port was not a number" << endl;
+      exit(EXIT_FAILURE);
+   }
+
+   address.sin_port = htons(stoi(argv[1]));
+
+   /* ASSIGN AN ADDRESS WITH PORT TO SOCKET */
    if (bind(create_socket, (struct sockaddr *)&address, sizeof(address)) == -1) {
       perror("bind error");
       return EXIT_FAILURE;
    }
 
-   ////////////////////////////////////////////////////////////////////////////
-   // ALLOW CONNECTION ESTABLISHING
-   // Socket, Backlog (= count of waiting connections allowed)
+   /* ALLOW CONNECTION ESTABLISHING Socket, Backlog (= count of waiting connections allowed) */
    if (listen(create_socket, 5) == -1) {
       perror("listen error");
       return EXIT_FAILURE;
@@ -142,14 +145,11 @@ int main(int argc, char* argv[])
 
    while (!abortRequested)
    {
-      /////////////////////////////////////////////////////////////////////////
-      // ignore errors here... because only information message
-      // https://linux.die.net/man/3/printf
+      /* ignore errors here... because only information message */
       printf("Waiting for connections...\n");
 
-      /////////////////////////////////////////////////////////////////////////
-      // ACCEPTS CONNECTION SETUP
-      // blocking, might have an accept-error on ctrl+c
+      
+      /* ACCEPTS CONNECTION SETUP blocking, might have an accept-error on ctrl+c */
       addrlen = sizeof(struct sockaddr_in);
       if ((new_socket = accept(create_socket,
                                (struct sockaddr *)&cliaddress,
@@ -163,9 +163,7 @@ int main(int argc, char* argv[])
          break;
       }
 
-      /////////////////////////////////////////////////////////////////////////
-      // START CLIENT
-      // ignore printf error handling
+      /* START CLIENT ignore printf error handling */
       printf("Client connected from %s:%d...\n",
              inet_ntoa(cliaddress.sin_addr),
              ntohs(cliaddress.sin_port));
@@ -193,8 +191,7 @@ void *clientCommunication(void *data, string folder)
    int size;
    int *current_socket = (int *)data;
 
-   ////////////////////////////////////////////////////////////////////////////
-   // SEND welcome message
+   /* SEND welcome message */
    strcpy(buffer, "Welcome to the server!\r\nPlease enter your commands...\r\n");
    if (send(*current_socket, buffer, strlen(buffer), 0) == -1) {
       perror("send failed");
@@ -202,10 +199,8 @@ void *clientCommunication(void *data, string folder)
    }
 
 
-   do
-   {
-      /////////////////////////////////////////////////////////////////////////
-      // RECEIVE
+   do {
+      /* RECEIVE */
       size = recv(*current_socket, buffer, BUF - 1, 0);
       if (size == -1) {
          if (abortRequested) {
@@ -237,24 +232,21 @@ void *clientCommunication(void *data, string folder)
       char flag = buffer[0];
       string bufferString = "";
       bufferString += buffer;
+      string response = ""; /* response to the client upon the given request */
       
 
       switch(flag){
          case 's': /* SEND */
-               receiveFromClient(bufferString, folder);
+               response = receiveFromClient(bufferString, folder) ? "OK" : "ERR";
             break;
          case 'l': /* LIST */
-               list(bufferString, folder);
-               //TODO: ADD SEND
+               response = list(bufferString, folder);
             break;
          case 'r': /* READ */
-               read(buffer, folder);
-               //TODO: ADD SEND
+               response = read(buffer, folder);
             break;
          case 'd': /* DELETE */
-               deleteMessage(buffer, folder);
-               //TODO: ADD SEND
-               //true: file deleted OK, false: file doesn't exist ERR
+               response = deleteMessage(buffer, folder) ? "OK" : "ERR";
             break;
          case '?':
             perror("Invalid message");
@@ -263,7 +255,7 @@ void *clientCommunication(void *data, string folder)
             break;
       }
 
-      if (send(*current_socket, "OK", 3, 0) == -1)
+      if (send(*current_socket, response.c_str(), strlen(response.c_str()), 0) == -1)
       {
          perror("send answer failed");
          return NULL;
@@ -293,51 +285,77 @@ void *clientCommunication(void *data, string folder)
  * 
  * @param buffer string received from client in the form of s;sender;receiver;subject;message
  * @param folder given directory where messages should be persisted
+ * @return true = receive worked/ OK, false = something went wrong/ ERR
  */
-void receiveFromClient(string buffer, string folder){
+bool receiveFromClient(string buffer, string folder){
 
    string sender, receiver, subject, message;
    
    buffer = removeString(buffer, "s"); /* remove flag at the beginning of the package */
 
    sender = getString(buffer); /* get sender */
+   if(!verifyStringLength(sender, MAX_NAME)) {
+      return false;
+   }
    buffer = removeString(buffer, sender);
    
    receiver = getString(buffer); /* get receiver */
+   if(!verifyStringLength(receiver, MAX_NAME)) {
+      return false;
+   }
    buffer = removeString(buffer, receiver);
    
    subject = getString(buffer); /* get subject */
+   if(!verifyStringLength(subject, MAX_SUBJ)) {
+      return false;
+   }
    buffer = removeString(buffer, subject);
    
-   message = buffer; /*get message */
+   message = buffer; /* get message */
+
+   string receiverFolder = folder + "/" + receiver;
 
    /* checks if receiver already has a folder for their messages */
    try {
-      string receiverFolder = folder + "/" + receiver;
-
       /* receiver does not have a folder */
       if(!fs::exists(receiverFolder)) { 
          fs::create_directory(receiverFolder);
+         ofstream outfile;
+         string counterFile = receiverFolder + "/" + COUNTERFILENAME;
+         outfile.open(counterFile.c_str());
+         if(!outfile){
+            cerr << "counterFile couldn't be opened" << endl;
+            return false;
+         }
+         outfile << 0 << endl;
       }
    } catch (fs::filesystem_error error) {
       cerr << error.what() << endl;
+      return false;
    }
-
-   //TODO: ADD ERROR HANDLING FOR FILE
 
    /* save message in a file */
    ofstream outfile; 
    string newFile = ""; /* name of the new file in which the message will be stored */
    string fileNumber = ""; /* make sure to get the highest file number, this can be a problem when someone deletes a lot of messages */
    
-   string receiverFolder = folder + "/" + receiver;
+   
    fileNumber += getHighestFileNumber(receiverFolder);
+   if(strcasecmp(fileNumber.c_str(), "ERR") == 0) {
+      return false;
+   }
    newFile += receiverFolder + "/" + fileNumber + ".txt";
    
-   /* write into subject;message into file */
+   /* write sender(\n)receiver(\n)subject(\n)message into file */
    outfile.open(newFile.c_str()); 
-   outfile << subject << SEPERATOR << message;
+   if(!outfile){
+      cerr << "counterFile couldn't be opened" << endl;
+      return false;
+   }
+   outfile << sender << endl << receiver << endl << subject << endl << message;
    outfile.close(); 
+
+   return true;
    
 }
 
@@ -347,7 +365,7 @@ void receiveFromClient(string buffer, string folder){
  * 
  * @param buffer string received from client in the form of "l;username"
  * @param folder given directory where messages should be persisted
- * @return string "0" if user/file not found, otherwise: "numOfFiles;subject1;subject2;...;subjectn" 
+ * @return "ERR" if user/file not found, otherwise: "numOfFiles;subject1;subject2;...;subjectn" 
  */
 string list(string buffer, string folder)
 {
@@ -355,38 +373,60 @@ string list(string buffer, string folder)
    buffer = removeString(buffer, "l"); /* remove flag at the beginning of the package */
 
    string username = buffer; /* get username */
+   if(!verifyStringLength(username, MAX_NAME)) {
+      return "ERR";
+   }
    string userFolder = folder + "/" + username; /* get username's folder */
    
-   if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
-      return to_string(0);
+   try {
+      if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
+         return to_string(0);
+      }
+   } catch (fs::filesystem_error error) {
+      cerr << error.what() << endl;
+      return "ERR";
    }
+   
 
    const fs::path path = userFolder; 
    string helperString; /* return string */
 
    helperString += to_string(getNumOfFiles(userFolder));
 
-   for (const auto& entry : fs::directory_iterator(path)) {
-      const auto filenameStr = entry.path().filename().string(); /* get name of file */
-      helperString += SEPERATOR;
-      
-      /* open the file and get the subject */
+   try{
+      for (const auto& entry : fs::directory_iterator(path)) {
+         const auto filenameStr = entry.path().filename().string(); /* get name of file */
+         if(strcasecmp(filenameStr.c_str(), COUNTERFILENAME) == 0) {
+            /* ignore the file where the number of files is stored */
+            continue;
+         }
+         helperString += SEPERATOR;
+         
+         /* open the file and get the subject */
+         string line;
+         string subject; 
+         ifstream file(userFolder + "/" + filenameStr);
+         int counter = 0;
 
-      string subject; 
-      ifstream file(userFolder + "/" + filenameStr);
+         if(file.is_open()) {
+            while(getline(file, line)){
+               ++counter;
+               if(counter == 3) { /* subject is in the third line of every file */
+                  subject = line;
+               }
+            }
+         } else {
+            cerr << strerror(errno);
+            return "ERR";
+         }
 
-      if(file.is_open()) {
-         getline(file, subject);
-      } else {
-         cerr << strerror(errno);
+         file.close();
+         helperString += subject;
+
       }
-
-      subject = getString(subject); 
-      file.close();
-      helperString += subject;
-
-      //TODO: add file error catching
-
+   } catch (fs::filesystem_error error) {
+      cerr << error.what() << endl;
+      return "ERR";
    }
 
    return helperString;
@@ -407,42 +447,40 @@ string read(string buffer, string folder)
    string username, messageNumber;
 
    username = getString(buffer);
+   if(!verifyStringLength(username, MAX_NAME)) {
+      return "ERR";
+   }
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
    string searchedFileDirectory = usernameFolder + "/" + messageNumber + ".txt";
 
-   if(!fs::exists(searchedFileDirectory)){
-      //TODO: Change this, turn it into an exception instead
-      return "error";
+   try{
+      if(!fs::exists(searchedFileDirectory)){
+         return "ERR";
+      }
+   } catch (fs::filesystem_error error) {
+      cerr << error.what() << endl;
+      return "ERR";
    }
 
-   string message;
-   string line;
-   bool removedSubject = false; /* files have the form subject;message, remove subject to get the actual message */
-   
-   ifstream file(searchedFileDirectory);
+   string message; /* message to return to client */
+   string line; /* line buffer for file */
+
+   ifstream file(searchedFileDirectory); /* copy entire content of searched File into message */
    if(file.is_open()) {
       while(!file.eof()) { 
          getline(file, line);
-         message += "\n";
-         if(!removedSubject) {
-            string subject = getString(line);
-            message = "";
-            message = removeString(line, subject);
-            removedSubject = true;
-            continue;
-         }
          message += line;
+         message += "\n";
       }
    } else {
-      cerr << strerror(errno);
+      cerr << "couldn't open file" << endl;
+      return "ERR";
    }
    file.close();
    
-   //TODO: add file error handling
-
    return message;
 
 }
@@ -453,7 +491,7 @@ string read(string buffer, string folder)
  * @param buffer string received from client in the form of "d;username;messageNumber"
  * @param folder given directory where messages should be persisted
  * @return true messageNumber.txt was found and deleted
- * @return false messageNumber.txt doesn't exist and can't be deleted
+ * @return false messageNumber.txt doesn't exist/ can't be deleted
  */
 bool deleteMessage(string buffer, string folder)
 {
@@ -462,17 +500,25 @@ bool deleteMessage(string buffer, string folder)
    string username, messageNumber;
 
    username = getString(buffer);
+   if(!verifyStringLength(username, MAX_NAME)) {
+      return false;
+   }
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
    string searchedFileDirectory = usernameFolder + "/" + messageNumber + ".txt";
 
-   if(!fs::exists(searchedFileDirectory)) {
+   try {
+      if(!fs::exists(searchedFileDirectory)) {
+         return false;
+      }
+
+      fs::remove(searchedFileDirectory);
+   } catch (fs::filesystem_error error) {
+      cerr << error.what() << endl;
       return false;
    }
-
-   fs::remove(searchedFileDirectory);
    return true;
 }
 
@@ -486,11 +532,7 @@ void signalHandler(int sig)
    if (sig == SIGINT) {
       printf("abort Requested... \n"); // ignore error
       abortRequested = 1;
-      /////////////////////////////////////////////////////////////////////////
-      // With shutdown() one can initiate normal TCP close sequence ignoring
-      // the reference count.
-      // https://beej.us/guide/bgnet/html/#close-and-shutdownget-outta-my-face
-      // https://linux.die.net/man/3/shutdown
+      /* With shutdown() one can initiate normal TCP close sequence ignoring the reference count. */
       if (new_socket != -1) {
          if (shutdown(new_socket, SHUT_RDWR) == -1) {
             perror("shutdown new_socket");
@@ -522,12 +564,12 @@ void signalHandler(int sig)
  */
 void printUsage(void)
 {
-    printf("Incorrect usage. Start the server using: \"./server <mail-spool-directoryname>\"\n");
+    printf("Incorrect usage. Start the server using: \"./twmailer-server <port> <mail-spool-directoryname>\"\n");
     exit(EXIT_FAILURE);
 }
 
 /**
- * @brief Get the number of files in the given folder
+ * @brief Get the number of existent files in the given folder
  * 
  * @param folder user directory where files(messages) are stored
  * @return int - number of files in the given folder
@@ -535,38 +577,58 @@ void printUsage(void)
 int getNumOfFiles(string folder)
 {
    int count = 0;
-   fs::path path = folder;
+   try {
+      fs::path path = folder;
 
-   for (auto& p : fs::directory_iterator(path)) {
-      count++;
+      for (auto& p : fs::directory_iterator(path)) {
+         count++;
+      }
+   } catch (fs::filesystem_error error) {
+      cerr << error.what() << endl;
+      exit(EXIT_FAILURE);
    }
-
-   return count;
+   return count - 1; /* - 1 because numOfFiles.txt doesn't count to the number of messages */
 }
 
 /**
- * @brief Finds the highest file number in the user's directory and returns highestFileNumber + 1 so that the server
- * knows what the next file should be called
+ * @brief Read the number of files that the user has received from numOfFiles.txt that is in the user's
+ * directory. Then update the number to numOfFiles + 1 since a new message is being added and this
+ * method is only called in the receive method. This way repeats due to deletes should be impossible.
  * 
- * @param folder user directory where files(messages) are stored
- * @return string highestFileNumber + 1
+ * @param folder user's directory where messages are stored
+ * @return string numOfFiles if okay, ERR if something went wrong
  */
 string getHighestFileNumber(string folder)
 {
-   int currentNumber = 0;
-   int highestNumber = 0;
-   string returnString;
-   fs::path path = folder;
-   for (const auto& entry : fs::directory_iterator(path)) {
-      const auto filenameStr = entry.path().filename().string();
-      size_t pos = filenameStr.find('.');
-      currentNumber = stoi(filenameStr.substr(0, pos));
-      if(highestNumber < currentNumber) {
-         highestNumber = currentNumber;
-      }
+   int numOfFiles = 0;
+   ifstream readFile; /* open numOfFile file to read from it */
+   string counterFile = folder + "/" + COUNTERFILENAME;
+   readFile.open(counterFile.c_str());
+   if (!readFile){
+      cerr << "readFile could not be opened" << endl;
+      return "ERR";
+   } else {
+      while (1) {
+			readFile >> numOfFiles;
+			if (readFile.eof())
+				break;
+
+			cout << numOfFiles;
+		}
+      readFile.close();
    }
 
-   return to_string(highestNumber + 1);
+   ofstream outFile; /* write new highest number into outFile */
+   numOfFiles++;
+   outFile.open(counterFile.c_str());
+   if (!outFile){
+      cerr << "readFile could not be opened" << endl;
+      return "ERR";
+   } else {
+      outFile << numOfFiles;
+   }
+
+   return to_string(numOfFiles);
 
 }
 
@@ -594,4 +656,14 @@ string getString(string buffer)
 string removeString(string buffer, string s1)
 {
    return buffer.erase(0, s1.length() + 1);
+}
+
+/**
+ * @brief verify that the given string isn't longer than maxStringLength
+ * @return true string is shorter than maxStringLength
+ * @return false string is longer than maxStringLength
+ */
+bool verifyStringLength(string string, int maxStringLength)
+{
+   return (string.length() > maxStringLength);
 }
