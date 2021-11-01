@@ -35,7 +35,7 @@ clean:
 	${CC} ${CFLAGS} -o obj/myserver.o myserver.cpp -c 
 
 ./bin/server: ./obj/myserver.o
-	${CC} ${CFLAGS} -o bin/server obj/myserver.o
+	${CC} ${CFLAGS} -o bin/twmailer-server obj/myserver.o
 
 ./bin/client: ./obj/myclient.o
-	${CC} ${CFLAGS} -o bin/client obj/myclient.o
+	${CC} ${CFLAGS} -o bin/twmailer-client obj/myclient.o

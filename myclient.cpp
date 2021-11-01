@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
-///////////////////////////////////////////////////////////////////////////////
+
 #define PORT 6543
 #define MAX_SUBJ 80;
 #define BUF 1024;
@@ -239,10 +239,9 @@ int main(int argc, char **argv){
     memset(&address, 0, sizeof(address));
     address.sin_family= AF_INET;
 //ARGUMENT HANDLING
-    if (argv[1]==NULL || argv[2]==NULL){
-
-        inet_aton("127.0.0.1", &address.sin_addr);
-        address.sin_port= htons(PORT);
+    if(argc!=3){
+        cout<<"Incorrect Usage. Start the Client usign ./twmailer-client $Ip-Adress $Port\n";
+        exit(EXIT_FAILURE);
     }
     else{
         //checks if given ip-address is viable
@@ -320,6 +319,7 @@ int main(int argc, char **argv){
             }
             else if(strcasecmp(buffer,"quit")==0){
                 isQuit = true;
+                isEntryCorrect=true;
             }
             else{
                 cout<<">>Command not found\n";
