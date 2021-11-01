@@ -16,7 +16,6 @@
 
 #define BUF 1024
 /* the number of files the user has received is stored in a file in their directory named numOfFiles */
-#define COUNTERFILENAME "numOfFiles.txt" 
 // #define PORT 6543
 #define SEPERATOR ";"
 #define MAX_NAME 8
@@ -321,14 +320,6 @@ bool receiveFromClient(string buffer, string folder){
       /* receiver does not have a folder */
       if(!fs::exists(receiverFolder)) { 
          fs::create_directory(receiverFolder);
-         ofstream outfile;
-         string counterFile = receiverFolder + "/" + COUNTERFILENAME;
-         outfile.open(counterFile.c_str());
-         if(!outfile){
-            cerr << "counterFile couldn't be opened" << endl;
-            return false;
-         }
-         outfile << 0 << endl;
       }
    } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
@@ -398,10 +389,6 @@ string list(string buffer, string folder)
    try{
       for (const auto& entry : fs::directory_iterator(path)) {
          const auto filenameStr = entry.path().filename().string(); /* get name of file */
-         if(strcasecmp(filenameStr.c_str(), COUNTERFILENAME) == 0) {
-            /* ignore the file where the number of files is stored */
-            continue;
-         }
          helperString += SEPERATOR;
          
          /* open the file and get the subject */
@@ -458,7 +445,18 @@ string read(string buffer, string folder)
 
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
-   string searchedFileDirectory = usernameFolder + "/" + messageNumber + ".txt";
+   string searchedFileDirectory;
+   int counter=0;
+   for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
+      counter++;
+      if(counter>stoi(buffer)){
+         return "ERR";
+      }
+      if(counter==stoi(buffer)){
+         searchedFileDirectory = e.path();
+         break;
+      }
+   }
 
    try{
       if(!fs::exists(searchedFileDirectory)){
@@ -472,6 +470,7 @@ string read(string buffer, string folder)
 
    string message; /* message to return to client */
    string line; /* line buffer for file */
+
 
    ifstream file(searchedFileDirectory); /* copy entire content of searched File into message */
    if(file.is_open()) {
@@ -517,7 +516,18 @@ bool deleteMessage(string buffer, string folder)
 
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
-   string searchedFileDirectory = usernameFolder + "/" + messageNumber + ".txt";
+   string searchedFileDirectory;
+   int counter=0;
+   for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
+      counter++;
+      if(counter>stoi(buffer)){
+         return "ERR";
+      }
+      if(counter==stoi(buffer)){
+         searchedFileDirectory = e.path();
+         break;
+      }
+   }
 
    try {
       if(!fs::exists(searchedFileDirectory)) {
@@ -597,7 +607,7 @@ int getNumOfFiles(string folder)
       cerr << error.what() << endl;
       exit(EXIT_FAILURE);
    }
-   return count - 1; /* - 1 because numOfFiles.txt doesn't count to the number of messages */
+   return count; /* - 1 because numOfFiles.txt doesn't count to the number of messages */
 }
 
 /**
@@ -610,36 +620,15 @@ int getNumOfFiles(string folder)
  */
 string getHighestFileNumber(string folder)
 {
-   int numOfFiles = 0;
-   ifstream readFile; /* open numOfFile file to read from it */
-   string counterFile = folder + "/" + COUNTERFILENAME;
-   readFile.open(counterFile.c_str());
-   if (!readFile){
-      cerr << "readFile could not be opened" << endl;
-      return "ERR";
-   } else {
-      while (1) {
-			readFile >> numOfFiles;
-			if (readFile.eof())
-				break;
+   fs::directory_entry e;
+   for(int i=1;;i++){
+      e=fs::directory_entry(folder+"/"+to_string(i)+".txt");
+      cout<<"Path: "<<e<<endl;
+      if(!e.exists()){
+         return to_string(i);
+      }
 
-			cout << numOfFiles;
-		}
-      readFile.close();
    }
-
-   ofstream outFile; /* write new highest number into outFile */
-   numOfFiles++;
-   outFile.open(counterFile.c_str());
-   if (!outFile){
-      cerr << "readFile could not be opened" << endl;
-      return "ERR";
-   } else {
-      outFile << numOfFiles;
-   }
-
-   return to_string(numOfFiles);
-
 }
 
 /**

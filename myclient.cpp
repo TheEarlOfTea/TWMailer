@@ -202,7 +202,6 @@ namespace client_functions{
      * @return returns true on sucess or false on server-site error
      **/
     bool printMessage(string s){
-        cout<<s<<endl;
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
