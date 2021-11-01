@@ -2,7 +2,7 @@
 # Makefile
 #############################################################################################
 # G++ is part of GCC (GNU compiler collection) and is a compiler best suited for C++
-CC=g++
+CC = g++
 
 # Compiler Flags: https://linux.die.net/man/1/g++
 #############################################################################################
@@ -26,7 +26,7 @@ all: ./bin/server ./bin/client
 
 clean:
 	clear
-	rm -f bin/* obj/*
+	rm -f bin/twmailer-client bin/twmailer-server obj/myserver.o obj/myclient.o
 
 ./obj/myclient.o: myclient.cpp
 	${CC} ${CFLAGS} -o obj/myclient.o myclient.cpp -c
