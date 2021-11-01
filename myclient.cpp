@@ -182,19 +182,20 @@ namespace client_functions{
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
-        string hs=strtok(buffer, ";");
-        cout<<hs<<"\n";
+        string hs = strtok(buffer, ";");
         //prints Subject list
-        if(strcmp(hs.c_str(),"OK")==0){
-            hs=strtok(NULL,";");
-            for(int i=1; i<=stoi(hs); i++){
-                printf("<Message - Nr.> %i; <Subject> %s\n", i, strtok(NULL,";"));
+        if(strcmp(hs.c_str(), "OK") == 0) {
+            hs = strtok(NULL,";");
+            cout << "<< " << hs << endl;
+            for(int i = 1; i <= stoi(hs); i++) {
+                printf("<< %s\n", strtok(NULL,";"));
             }
             return true;
         }
-        cerr<<"A server-site error occured\n";
+        cerr << "A server-site error occured\n";
         return false;
     }
+
     /**
      * @brief displays a message
      * @param s string of format "OK;$Message"
@@ -204,16 +205,37 @@ namespace client_functions{
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
-        string hs=strtok(buffer, ";");
-        cout<<hs<<"\n";
+        string hs = strtok(buffer, ";");
+        cout << "<< " << hs << "\n";
         //prints Message
         if(strcmp(hs.c_str(),"OK")==0){
-            cout<<"<Message>\n"<<strtok(NULL,";")<<"\n";
+            cout << "<Message>\n" << strtok(NULL,";") << "\n";
             return true;;
         }
+        cout << "<< ERR" << endl;
         cerr<<"A server-site error occured\n";
         return false;
     }
+
+    /**
+     * @brief Prints server replies for the SEND/DEL command
+     * @param s string of format "OK" or "ERR"
+     * @return true on sucess or false on server-site error
+     */
+    bool printReply(string s){
+        char buffer[1024];
+        strcpy(buffer, s.c_str());
+
+        //prints Message
+        if(strcmp(buffer, "OK") == 0) {
+            cout << "<< OK" << endl;
+            return true;;
+        }
+        cout << "<< ERR" << endl;
+        cerr << "A server-side error occured\n";
+        return false;
+    }
+
 
 }
 using namespace client_functions;
@@ -226,9 +248,11 @@ int main(int argc, char **argv){
     struct sockaddr_in address;
     int size;
     bool isEntryCorrect;
-    bool isQuit=false;
-    bool isList= false;
-    bool isMessage=false;
+    bool isSend = false;
+    bool isQuit = false;
+    bool isList = false;
+    bool isMessage = false;
+    bool isDel = false;
     string hs;
 
     if((client_socket= socket(AF_INET, SOCK_STREAM, 0))==-1){
@@ -238,9 +262,9 @@ int main(int argc, char **argv){
 
     memset(&address, 0, sizeof(address));
     address.sin_family= AF_INET;
-//ARGUMENT HANDLING
-    if(argc!=3){
-        cout<<"Incorrect Usage. Start the Client usign ./twmailer-client $Ip-Adress $Port\n";
+    //ARGUMENT HANDLING
+    if(argc != 3){
+        cout<<"Incorrect Usage. Start the Client using ./twmailer-client $Ip-Adress $Port\n";
         exit(EXIT_FAILURE);
     }
     else{
@@ -302,6 +326,7 @@ int main(int argc, char **argv){
             if(strcasecmp(buffer,"send")==0){
                 hs=send();
                 isEntryCorrect=true;
+                isSend = true;
             }
             else if(strcasecmp(buffer,"list")==0){
                 hs=list();
@@ -316,6 +341,7 @@ int main(int argc, char **argv){
             else if(strcasecmp(buffer,"del")==0){
                 hs=del();
                 isEntryCorrect=true;
+                isDel = true;
             }
             else if(strcasecmp(buffer,"quit")==0){
                 isQuit = true;
@@ -337,7 +363,7 @@ int main(int argc, char **argv){
                 size=strlen(buffer);
                 if(send(client_socket, buffer, size, 0)==-1){
 
-                    perror("An error weil sending data occured");
+                    perror("An error while sending data occured");
                     break;
 
                 }
@@ -359,14 +385,22 @@ int main(int argc, char **argv){
                             fprintf(stderr, "<< Server error occured, abort\n");
                             break;
                         }
-                        isList=false;
+                        isList = false;
                     }
                     else if(isMessage){
                         if(!printMessage(buffer)){
                             fprintf(stderr, "<< Server error occured, abort\n");
                             break;
                         }
-                        isMessage=false;
+                        isMessage = false;
+                    }
+                    else if(isDel || isSend) {
+                        if(!printReply(buffer)){
+                            fprintf(stderr, "<< Server error occured, abort\n");
+                            break;
+                        }
+                        isDel = false;
+                        isSend = false;
                     }
                 }
             }         
