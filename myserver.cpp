@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
          cout << folder << " does not exist. Creating now..." << endl;
          fs::create_directory(folder);
       } 
-   } catch(fs::filesystem_error error) {
+   } catch(fs::filesystem_error& error) {
       cerr << error.what() << endl;
       exit(EXIT_FAILURE);
    }
@@ -124,7 +124,7 @@ int main(int argc, char* argv[])
          exit(EXIT_FAILURE);
      }
      
-   } catch (invalid_argument e1) { /* exits, if input port is NAN */
+   } catch (invalid_argument& e1) { /* exits, if input port is NAN */
       cerr <<"Port was not a number" << endl;
       exit(EXIT_FAILURE);
    }
@@ -249,7 +249,7 @@ void *clientCommunication(void *data, string folder)
                response = deleteMessage(buffer, folder) ? "OK" : "ERR";
             break;
          case '?':
-            perror("Invalid message");
+            perror("Invalid command");
             break;
          default: 
             break;
@@ -289,40 +289,30 @@ void *clientCommunication(void *data, string folder)
  */
 bool receiveFromClient(string buffer, string folder){
 
-
-/**
- * Was hier nicht ganz funktioniert
- * hier funktionieren nur die längenüberprüfungen nicht (geben fälschlicherweise false zurück)
- * hab sie deaktiviert und es geht
- */
-
-
-
    string sender, receiver, subject, message;
 
    
    buffer = removeString(buffer, "s"); /* remove flag at the beginning of the package */
 
    sender = getString(buffer); /* get sender */
-   /*if(!verifyStringLength(sender, MAX_NAME)) {
+   if(!verifyStringLength(sender, MAX_NAME)) {
       return false;
-   }*/
+   }
    buffer = removeString(buffer, sender);
    
    receiver = getString(buffer); /* get receiver */
-   /*if(!verifyStringLength(receiver, MAX_NAME)) {
+   if(!verifyStringLength(receiver, MAX_NAME)) {
       return false;
-   }*/
+   }
    buffer = removeString(buffer, receiver);
    
    subject = getString(buffer); /* get subject */
-   /*if(!verifyStringLength(subject, MAX_SUBJ)) {
+   if(!verifyStringLength(subject, MAX_SUBJ)) {
       return false;
-   }*/
+   }
    buffer = removeString(buffer, subject);
    
    message = buffer; /* get message */
-   cout<<message<<"\n";
 
    string receiverFolder = folder + "/" + receiver;
 
@@ -340,7 +330,7 @@ bool receiveFromClient(string buffer, string folder){
          }
          outfile << 0 << endl;
       }
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return false;
    }
@@ -376,32 +366,25 @@ bool receiveFromClient(string buffer, string folder){
  * 
  * @param buffer string received from client in the form of "l;username"
  * @param folder given directory where messages should be persisted
- * @return "ERR" if user/file not found, otherwise: "numOfFiles;subject1;subject2;...;subjectn" 
+ * @return "ERR" if user/file not found, otherwise: "OK;numOfFiles;subject1;subject2;...;subjectn" 
  */
 string list(string buffer, string folder)
 {
-   
-
-/**
- * was hier nicht funktioniert
- * im endeffekt wars nur das ok am anfang, das gefehlt hat
- * kannst so lassen, wenn du willst
- */
 
    buffer = removeString(buffer, "l"); /* remove flag at the beginning of the package */
 
    string username = buffer; /* get username */
-   /*if(!verifyStringLength(username, MAX_NAME)) {
+   if(!verifyStringLength(username, MAX_NAME)) {
       return "ERR";
-   }*/
+   }
    string userFolder = folder + "/" + username; /* get username's folder */
    
    try {
       if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
+        cout << userFolder << "does not exist" << endl;
          return to_string(0);
-         cout<<"folder existiert nicht\n";
       }
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return "ERR";
    }
@@ -436,7 +419,7 @@ string list(string buffer, string folder)
             }
          } else {
             cerr << strerror(errno);
-            cout<<"fehler bei file.is_open\n";
+            cout << "file.is_open() error" << endl;
             return "ERR";
          }
 
@@ -444,11 +427,12 @@ string list(string buffer, string folder)
          helperString += subject;
 
       }
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return "ERR";
    }
-   return "OK;"+helperString;
+   cout << "list: " << helperString << endl;
+   return "OK;" + helperString;
 }
 
 /**
@@ -462,22 +446,14 @@ string list(string buffer, string folder)
 string read(string buffer, string folder)
 {
 
-   /**
-    * was hier noch nicht funktioniert
-    * das numOfFiles.txt ist meiner meinung nach bescheuert
-    * du verlässt dich darauf, dass darin immer die richtige anzahl von file steht
-    * aber:
-    * manuelles löschen setzt den counter nicht zurück
-    * der del befehl setzt den counter nicht nach unten
-    */
    buffer = removeString(buffer, "r"); /* remove flag at the beginning of the package */
 
    string username, messageNumber;
 
    username = getString(buffer);
-   /*if(!verifyStringLength(username, MAX_NAME)) {
+   if(!verifyStringLength(username, MAX_NAME)) {
       return "ERR";
-   }*/
+   }
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
@@ -486,10 +462,10 @@ string read(string buffer, string folder)
 
    try{
       if(!fs::exists(searchedFileDirectory)){
-         cout<<"file exisitert nicht\n";
+         cout << "file does not exist" << endl;
          return "ERR";
       }
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return "ERR";
    }
@@ -510,7 +486,7 @@ string read(string buffer, string folder)
    }
    file.close();
    
-   return "OK;"+message;
+   return "OK;" + message;
 
 }
 
@@ -529,9 +505,9 @@ bool deleteMessage(string buffer, string folder)
    string username, messageNumber;
 
    username = getString(buffer);
-   /*if(!verifyStringLength(username, MAX_NAME)) {
+   if(!verifyStringLength(username, MAX_NAME)) {
       return false;
-   }*/
+   }
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
@@ -544,7 +520,7 @@ bool deleteMessage(string buffer, string folder)
       }
 
       fs::remove(searchedFileDirectory);
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       return false;
    }
@@ -612,7 +588,7 @@ int getNumOfFiles(string folder)
       for (auto& p : fs::directory_iterator(path)) {
          count++;
       }
-   } catch (fs::filesystem_error error) {
+   } catch (fs::filesystem_error& error) {
       cerr << error.what() << endl;
       exit(EXIT_FAILURE);
    }
@@ -694,5 +670,5 @@ string removeString(string buffer, string s1)
  */
 bool verifyStringLength(string string, int maxStringLength)
 {
-   return (string.length() > maxStringLength);
+   return (string.length() <= (unsigned)maxStringLength);
 }
