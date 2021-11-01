@@ -475,6 +475,11 @@ string read(string buffer, string folder)
 
    ifstream file(searchedFileDirectory); /* copy entire content of searched File into message */
    if(file.is_open()) {
+      for(int i=0; i<3; i++){
+         getline(file, line);
+         message+=line;
+         message+=";";
+      }
       while(!file.eof()) { 
          getline(file, line);
          message += line;

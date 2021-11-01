@@ -183,12 +183,12 @@ namespace client_functions{
         char buffer[1024];
         strcpy(buffer, s.c_str());
         string hs = strtok(buffer, ";");
+        cout << "<< " << hs << "\n";
         //prints Subject list
         if(strcmp(hs.c_str(), "OK") == 0) {
-            hs = strtok(NULL,";");
-            cout << "<< " << hs << endl;
+            hs=strtok(NULL,";");
             for(int i = 1; i <= stoi(hs); i++) {
-                printf("<< %s\n", strtok(NULL,";"));
+                printf("<Message-Nr.>%i <Subject> %s\n", i, strtok(NULL,";"));
             }
             return true;
         }
@@ -201,7 +201,8 @@ namespace client_functions{
      * @param s string of format "OK;$Message"
      * @return returns true on sucess or false on server-site error
      **/
-    bool printMessage(string s){ 
+    bool printMessage(string s){
+        cout<<s<<endl;
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
@@ -209,6 +210,9 @@ namespace client_functions{
         cout << "<< " << hs << "\n";
         //prints Message
         if(strcmp(hs.c_str(),"OK")==0){
+            cout << "<Sender> " << strtok(NULL,";") << "\n";
+            cout << "<Receiver> " << strtok(NULL,";") << "\n";
+            cout << "<Subject> " << strtok(NULL,";") << "\n";
             cout << "<Message>\n" << strtok(NULL,";") << "\n";
             return true;;
         }
