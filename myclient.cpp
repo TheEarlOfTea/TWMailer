@@ -80,7 +80,6 @@ namespace auxilliary{
     }
 }
 
-//contains the 4 main functions send, list, read and del
 namespace client_functions{
     using namespace auxilliary;
 
@@ -386,21 +385,21 @@ int main(int argc, char **argv){
                     if(isList){
                         if(!printList(buffer)){
                             fprintf(stderr, "<< Server error occured, abort\n");
-                            break;
+                            exit(EXIT_FAILURE);
                         }
                         isList = false;
                     }
                     else if(isMessage){
                         if(!printMessage(buffer)){
                             fprintf(stderr, "<< Server error occured, abort\n");
-                            break;
+                            exit(EXIT_FAILURE);
                         }
                         isMessage = false;
                     }
                     else if(isDel || isSend) {
                         if(!printReply(buffer)){
                             fprintf(stderr, "<< Server error occured, abort\n");
-                            break;
+                            exit(EXIT_FAILURE);
                         }
                         isDel = false;
                         isSend = false;
