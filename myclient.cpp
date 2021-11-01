@@ -208,7 +208,7 @@ namespace client_functions{
         cout<<hs<<"\n";
         //prints Message
         if(strcmp(hs.c_str(),"OK")==0){
-            cout<<strtok(NULL,";")<<"\n";
+            cout<<"<Message>\n"<<strtok(NULL,";")<<"\n";
             return true;;
         }
         cerr<<"A server-site error occured\n";
@@ -225,7 +225,8 @@ int main(int argc, char **argv){
     char buffer[buffer];
     struct sockaddr_in address;
     int size;
-    bool isQuit, isEntryCorrect;
+    bool isEntryCorrect;
+    bool isQuit=false;
     bool isList= false;
     bool isMessage=false;
     string hs;
@@ -256,7 +257,7 @@ int main(int argc, char **argv){
             exit(EXIT_FAILURE);
         }
         //exits, if input port is NAN
-        }catch(invalid_argument e1){
+        }catch(invalid_argument&){
             cout<<"Port was not a number\n";
             exit(EXIT_FAILURE);
         }
@@ -317,6 +318,9 @@ int main(int argc, char **argv){
                 hs=del();
                 isEntryCorrect=true;
             }
+            else if(strcasecmp(buffer,"quit")==0){
+                isQuit = true;
+            }
             else{
                 cout<<">>Command not found\n";
                 isEntryCorrect=false;
@@ -324,7 +328,7 @@ int main(int argc, char **argv){
 
 
             
-            isQuit = strcmp(buffer, "quit") == 0;
+            
             //if a suitable command is found
             if(isEntryCorrect){
                 
@@ -363,14 +367,6 @@ int main(int argc, char **argv){
                             break;
                         }
                         isMessage=false;
-                    }
-                    else{
-
-                    }
-                    printf("<< %s\n", buffer); // ignore error
-                    if (strcmp("OK", buffer) != 0){
-                    fprintf(stderr, "<< Server error occured, abort\n");
-                    break;
                     }
                 }
             }         

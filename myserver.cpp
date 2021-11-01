@@ -289,29 +289,40 @@ void *clientCommunication(void *data, string folder)
  */
 bool receiveFromClient(string buffer, string folder){
 
+
+/**
+ * Was hier nicht ganz funktioniert
+ * hier funktionieren nur die längenüberprüfungen nicht (geben fälschlicherweise false zurück)
+ * hab sie deaktiviert und es geht
+ */
+
+
+
    string sender, receiver, subject, message;
+
    
    buffer = removeString(buffer, "s"); /* remove flag at the beginning of the package */
 
    sender = getString(buffer); /* get sender */
-   if(!verifyStringLength(sender, MAX_NAME)) {
+   /*if(!verifyStringLength(sender, MAX_NAME)) {
       return false;
-   }
+   }*/
    buffer = removeString(buffer, sender);
    
    receiver = getString(buffer); /* get receiver */
-   if(!verifyStringLength(receiver, MAX_NAME)) {
+   /*if(!verifyStringLength(receiver, MAX_NAME)) {
       return false;
-   }
+   }*/
    buffer = removeString(buffer, receiver);
    
    subject = getString(buffer); /* get subject */
-   if(!verifyStringLength(subject, MAX_SUBJ)) {
+   /*if(!verifyStringLength(subject, MAX_SUBJ)) {
       return false;
-   }
+   }*/
    buffer = removeString(buffer, subject);
    
    message = buffer; /* get message */
+   cout<<message<<"\n";
 
    string receiverFolder = folder + "/" + receiver;
 
@@ -370,17 +381,25 @@ bool receiveFromClient(string buffer, string folder){
 string list(string buffer, string folder)
 {
    
+
+/**
+ * was hier nicht funktioniert
+ * im endeffekt wars nur das ok am anfang, das gefehlt hat
+ * kannst so lassen, wenn du willst
+ */
+
    buffer = removeString(buffer, "l"); /* remove flag at the beginning of the package */
 
    string username = buffer; /* get username */
-   if(!verifyStringLength(username, MAX_NAME)) {
+   /*if(!verifyStringLength(username, MAX_NAME)) {
       return "ERR";
-   }
+   }*/
    string userFolder = folder + "/" + username; /* get username's folder */
    
    try {
       if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
          return to_string(0);
+         cout<<"folder existiert nicht\n";
       }
    } catch (fs::filesystem_error error) {
       cerr << error.what() << endl;
@@ -417,6 +436,7 @@ string list(string buffer, string folder)
             }
          } else {
             cerr << strerror(errno);
+            cout<<"fehler bei file.is_open\n";
             return "ERR";
          }
 
@@ -428,8 +448,7 @@ string list(string buffer, string folder)
       cerr << error.what() << endl;
       return "ERR";
    }
-
-   return helperString;
+   return "OK;"+helperString;
 }
 
 /**
@@ -442,14 +461,23 @@ string list(string buffer, string folder)
  */
 string read(string buffer, string folder)
 {
+
+   /**
+    * was hier noch nicht funktioniert
+    * das numOfFiles.txt ist meiner meinung nach bescheuert
+    * du verlässt dich darauf, dass darin immer die richtige anzahl von file steht
+    * aber:
+    * manuelles löschen setzt den counter nicht zurück
+    * der del befehl setzt den counter nicht nach unten
+    */
    buffer = removeString(buffer, "r"); /* remove flag at the beginning of the package */
 
    string username, messageNumber;
 
    username = getString(buffer);
-   if(!verifyStringLength(username, MAX_NAME)) {
+   /*if(!verifyStringLength(username, MAX_NAME)) {
       return "ERR";
-   }
+   }*/
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
@@ -458,6 +486,7 @@ string read(string buffer, string folder)
 
    try{
       if(!fs::exists(searchedFileDirectory)){
+         cout<<"file exisitert nicht\n";
          return "ERR";
       }
    } catch (fs::filesystem_error error) {
@@ -481,7 +510,7 @@ string read(string buffer, string folder)
    }
    file.close();
    
-   return message;
+   return "OK;"+message;
 
 }
 
@@ -500,9 +529,9 @@ bool deleteMessage(string buffer, string folder)
    string username, messageNumber;
 
    username = getString(buffer);
-   if(!verifyStringLength(username, MAX_NAME)) {
+   /*if(!verifyStringLength(username, MAX_NAME)) {
       return false;
-   }
+   }*/
    buffer = removeString(buffer, username);
 
    messageNumber = buffer;
