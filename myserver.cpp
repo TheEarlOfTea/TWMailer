@@ -10,6 +10,7 @@
 #include <iostream>
 #include <filesystem>
 #include <fstream>
+#include <ldap.h>
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -17,21 +18,24 @@
 #define BUF 1024
 /* the number of files the user has received is stored in a file in their directory named numOfFiles */
 // #define PORT 6543
-#define SEPERATOR ";"
+#define SEPERATOR "\n"
 #define MAX_NAME 8
 #define MAX_SUBJ 80
 
 ///////////////////////////////////////////////////////////////////////////////
 
+bool successfulLogin = false;
 int abortRequested = 0;
 int create_socket = -1;
 int new_socket = -1;
 using namespace std;
 namespace fs = std::filesystem;
+string clientIP = "";
 
 ///////////////////////////////////////////////////////////////////////////////
 
 void *clientCommunication(void *data, string folder);
+string login(string buffer);
 bool receiveFromClient(string buffer, string folder);
 string list(string buffer, string folder);
 string read(string buffer, string folder);
@@ -166,8 +170,11 @@ int main(int argc, char* argv[])
       printf("Client connected from %s:%d...\n",
              inet_ntoa(cliaddress.sin_addr),
              ntohs(cliaddress.sin_port));
+      clientIP = inet_ntoa(cliaddress.sin_addr);
       clientCommunication(&new_socket, folder); // returnValue can be ignored
       new_socket = -1;
+
+      
    }
 
    // frees the descriptor
@@ -189,6 +196,8 @@ void *clientCommunication(void *data, string folder)
    char buffer[BUF];
    int size;
    int *current_socket = (int *)data;
+
+   
 
    /* SEND welcome message */
    strcpy(buffer, "Welcome to the server!\r\nPlease enter your commands...\r\n");
@@ -228,31 +237,35 @@ void *clientCommunication(void *data, string folder)
       printf("Message received: %s\n", buffer); // ignore error
 
       /* first char of the buffer is the flag sent from the client */
-      char flag = buffer[0];
-      string bufferString = "";
-      bufferString += buffer;
-      string response = ""; /* response to the client upon the given request */
+      // char flag = buffer[0];
+      // string bufferString = "";
+      // bufferString += buffer;
+      string flag = getString(buffer);
+      string bufferString = removeString(buffer, flag);
       
+      string response = ""; /* response to the client upon the given request */
 
-      switch(flag){
-         case 's': /* SEND */
-               response = receiveFromClient(bufferString, folder) ? "OK" : "ERR";
-            break;
-         case 'l': /* LIST */
-               response = list(bufferString, folder);
-            break;
-         case 'r': /* READ */
-               response = read(buffer, folder);
-            break;
-         case 'd': /* DELETE */
-               response = deleteMessage(buffer, folder) ? "OK" : "ERR";
-            break;
-         case '?':
-            perror("Invalid command");
-            break;
-         default: 
-            break;
+      
+      if(strcasecmp(flag.c_str(), "login") == 0) {
+         response = login(bufferString);
       }
+      // TODO: change flags to full word
+      if(successfulLogin) {
+         if (strcasecmp(flag.c_str(), "s") == 0) {
+            response = receiveFromClient(bufferString, folder) ? "OK" : "ERR";
+         } 
+         else if (strcasecmp(flag.c_str(), "l") == 0) {
+            response = list(bufferString, folder);
+         }
+         else if (strcasecmp(flag.c_str(), "r") == 0) {
+            response = read(buffer, folder);
+         }
+         else if (strcasecmp(flag.c_str(), "d") == 0) {
+            response = deleteMessage(buffer, folder) ? "OK" : "ERR";
+         } 
+      }
+      
+      
 
       if (send(*current_socket, response.c_str(), strlen(response.c_str()), 0) == -1)
       {
@@ -275,6 +288,44 @@ void *clientCommunication(void *data, string folder)
    }
 
    return NULL;
+}
+
+string login(string buffer)
+{
+   char buff[1024];
+   strcpy(buff, buffer.c_str());
+   string username = getString(buffer);
+   string password = removeString(buffer, username);
+
+   cout << "Username: " << username << "\nPassword: " << password << endl;
+   
+   // TODO: add LDAP stuff here
+   // TODO: registering?
+
+   if(clientIP.empty()) {
+      cerr << "Couldn't access the client IP address" << endl;
+      return "ERR";
+   }
+
+   ofstream outfile;
+
+   outfile.open("blacklist.txt", ios_base::app);
+   if(!outfile) {
+      cerr << "blacklist.txt couldn't be opened" << endl;
+      return "ERR";
+   }
+
+   time_t now = time(0);
+
+   tm *ltm = localtime(&now);
+
+   outfile << username << ";" << now << endl;
+   
+   cout << "Current second " << now << endl;
+
+   outfile.close();   
+
+   return "OK";
 }
 
 /**
@@ -446,13 +497,13 @@ string read(string buffer, string folder)
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
    string searchedFileDirectory;
-   int counter=0;
+   int counter = 0;
    for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
       counter++;
-      if(counter>stoi(buffer)){
+      if(counter > stoi(buffer)){
          return "ERR";
       }
-      if(counter==stoi(buffer)){
+      if(counter == stoi(buffer)){
          searchedFileDirectory = e.path();
          break;
       }
@@ -474,10 +525,10 @@ string read(string buffer, string folder)
 
    ifstream file(searchedFileDirectory); /* copy entire content of searched File into message */
    if(file.is_open()) {
-      for(int i=0; i<3; i++){
+      for(int i = 0; i < 3; i++) {
          getline(file, line);
-         message+=line;
-         message+=";";
+         message += line;
+         message += ";";
       }
       while(!file.eof()) { 
          getline(file, line);
@@ -517,13 +568,13 @@ bool deleteMessage(string buffer, string folder)
    messageNumber = buffer;
    string usernameFolder = folder + "/" + username;
    string searchedFileDirectory;
-   int counter=0;
+   int counter = 0;
    for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
       counter++;
-      if(counter>stoi(buffer)){
+      if(counter > stoi(buffer)){
          return "ERR";
       }
-      if(counter==stoi(buffer)){
+      if(counter == stoi(buffer)){
          searchedFileDirectory = e.path();
          break;
       }
@@ -621,9 +672,8 @@ int getNumOfFiles(string folder)
 string getHighestFileNumber(string folder)
 {
    fs::directory_entry e;
-   for(int i=1;;i++){
-      e=fs::directory_entry(folder+"/"+to_string(i)+".txt");
-      cout<<"Path: "<<e<<endl;
+   for(int i = 1; ; i++){
+      e = fs::directory_entry(folder + "/" + to_string(i) + ".txt");
       if(!e.exists()){
          return to_string(i);
       }
