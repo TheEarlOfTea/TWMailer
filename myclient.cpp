@@ -16,6 +16,7 @@
 #define CORRECT_SERVER_RESPONSE "OK";
 
 using namespace std;
+bool loginSuccessful = false;
 
 //functions and variables in auxillary are used in namespace client_functions
 namespace auxilliary{
@@ -80,8 +81,26 @@ namespace auxilliary{
     }
 }
 
-namespace client_functions{
+namespace client_functions {
     using namespace auxilliary;
+
+    string login() 
+    {
+        string username, password, package;
+
+        do {
+            cout << "<Username>: ";
+            getline(cin, username);
+
+        } while(!isNameOk(username));
+
+        cout << "<Password>: ";
+        getline(cin, password);
+
+        package = "LOGIN\n" + username + '\n' + password;
+        
+        return package;
+    }
 
     /**
      * @brief creates a package, that sends the server a message
@@ -114,7 +133,8 @@ namespace client_functions{
             }while(hs!=".");
         }while(!isMessageOk(message));
 
-        package="s"+seperator+sender+seperator+receiver+seperator+subject+seperator+message;
+        package = "s" + seperator + sender + seperator + receiver 
+                    + seperator + subject + seperator + message;
         return package;
     }
     /**
@@ -169,9 +189,26 @@ namespace client_functions{
         
         package="d"+seperator+username+seperator+msg_number;
         return package;
+    }
 
+
+    bool printLogin(string s) {
+        char buffer[1024];
+        strcpy(buffer, s.c_str());
+        string hs = strtok(buffer, ";");
+
+         if(strcmp(hs.c_str(), "OK") == 0) {
+            cout << "<< Login Successful" << endl;
+        } else {
+            cout << "<< Please try again" << endl;
+        }
+
+        return true;
 
     }
+    
+    
+    
     /**
      * @brief displays a subject list
      * @param s string of format "OK;$NrOfSubjects;$Subject1;$Subject2;...;$SubjectN"
@@ -182,12 +219,12 @@ namespace client_functions{
         char buffer[1024];
         strcpy(buffer, s.c_str());
         string hs = strtok(buffer, ";");
-        cout << "<< " << hs << "\n";
         //prints Subject list
         if(strcmp(hs.c_str(), "OK") == 0) {
-            hs=strtok(NULL,";");
+            hs = strtok(NULL,";");
+            cout << "<< " << hs << endl;
             for(int i = 1; i <= stoi(hs); i++) {
-                printf("<Message-Nr.>%i <Subject> %s\n", i, strtok(NULL,";"));
+                printf("<< <Message-Nr.>%i <Subject> %s\n", i, strtok(NULL,";"));
             }
             return true;
         }
@@ -215,7 +252,7 @@ namespace client_functions{
             return true;;
         }
         cout << "<< ERR" << endl;
-        cerr<<"A server-site error occured\n";
+        cerr <<"A server-side error occured\n";
         return false;
     }
 
@@ -240,6 +277,7 @@ namespace client_functions{
 
 
 }
+
 using namespace client_functions;
 
 int main(int argc, char **argv){
@@ -250,6 +288,7 @@ int main(int argc, char **argv){
     struct sockaddr_in address;
     int size;
     bool isEntryCorrect;
+    bool isLogin = false;
     bool isSend = false;
     bool isQuit = false;
     bool isList = false;
@@ -257,47 +296,47 @@ int main(int argc, char **argv){
     bool isDel = false;
     string hs;
 
-    if((client_socket= socket(AF_INET, SOCK_STREAM, 0))==-1){
+    if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Fehler beim erstellen des Sockets");
         exit(EXIT_FAILURE);
     }
 
     memset(&address, 0, sizeof(address));
-    address.sin_family= AF_INET;
+    address.sin_family = AF_INET;
     //ARGUMENT HANDLING
-    if(argc != 3){
-        cout<<"Incorrect Usage. Start the Client using ./twmailer-client $Ip-Adress $Port\n";
+    if(argc != 3) {
+        cout << "Incorrect Usage. Start the Client using ./twmailer-client $Ip-Adress $Port\n";
         exit(EXIT_FAILURE);
     }
     else{
         //checks if given ip-address is viable
-        if(inet_pton(AF_INET, argv[1], &address.sin_addr)==0){
-            cout<<"Input IP-address is not valid\n";
+        if(inet_pton(AF_INET, argv[1], &address.sin_addr) == 0) {
+            cout << "Input IP-address is not valid\n";
             exit(EXIT_FAILURE);
         }
-        try{
+        try {
             //checks if port is in suitable range
-            if(stoi(argv[2])<1024 || stoi(argv[2])>65535){
-            cout<<"Input Port is not in usable port range\n";
+            if(stoi(argv[2]) < 1024 || stoi(argv[2]) > 65535){
+            cout << "Input Port is not in usable port range\n";
             exit(EXIT_FAILURE);
         }
         //exits, if input port is NAN
-        }catch(invalid_argument&){
-            cout<<"Port was not a number\n";
+        } catch(invalid_argument&) {
+            cout << "Port was not a number\n";
             exit(EXIT_FAILURE);
         }
-        address.sin_port=htons(stoi(argv[2]));
+        address.sin_port = htons(stoi(argv[2]));
 
     }
 
-    if(connect(client_socket, (struct sockaddr *)&address, sizeof(address))==-1){
+    if(connect(client_socket, (struct sockaddr *)&address, sizeof(address)) == -1) {
         perror("Server konnte nicht erreicht werden");
         exit(EXIT_FAILURE);
     }
     printf("Connection with server (%s) established\n",
         inet_ntoa(address.sin_addr));
 
-    size= recv(client_socket, buffer, BUFFER_SIZE-1, 0);
+    size = recv(client_socket, buffer, BUFFER_SIZE-1, 0);
     switch(size){
         case -1:
             perror("recv error");
@@ -310,9 +349,9 @@ int main(int argc, char **argv){
             printf("%s", buffer);
     }
 
-    do{
+    do {
         printf(">> ");
-        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL){
+        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
             int size = strlen(buffer);
             // remove new-line signs from string at the end
             if (buffer[size - 2] == '\r' && buffer[size - 1] == '\n'){
@@ -324,39 +363,59 @@ int main(int argc, char **argv){
                 buffer[size] = 0;
             }
 
-            //checks for any suitable commands
-            if(strcasecmp(buffer,"send")==0){
-                hs=send();
-                isEntryCorrect=true;
-                isSend = true;
+            if(strcasecmp(buffer, "login") == 0) {
+                if(loginSuccessful) {
+                    cout << "Please log out of your current user before trying to log in to a new one!" << endl;
+                    continue;
+                }  
+
+                hs = login();
+                isEntryCorrect = true;
+                isLogin = true;
+
             }
-            else if(strcasecmp(buffer,"list")==0){
-                hs=list();
-                isEntryCorrect=true;
-                isList=true;
-            }
-            else if(strcasecmp(buffer,"read")==0){
-                hs=read();
-                isEntryCorrect=true;
-                isMessage=true;
-            }
-            else if(strcasecmp(buffer,"del")==0){
-                hs=del();
-                isEntryCorrect=true;
-                isDel = true;
-            }
-            else if(strcasecmp(buffer,"quit")==0){
-                isQuit = true;
-                isEntryCorrect=true;
-            }
-            else{
-                cout<<">>Command not found\n";
-                isEntryCorrect=false;
+            
+            /* Following commands are only allowed if user is already logged in */
+            if(loginSuccessful) {
+                //checks for any suitable commands
+                if(strcasecmp(buffer,"send")==0){
+                    hs=send();
+                    isEntryCorrect=true;
+                    isSend = true;
+                }
+                else if(strcasecmp(buffer,"list")==0){
+                    hs=list();
+                    isEntryCorrect=true;
+                    isList=true;
+                }
+                else if(strcasecmp(buffer,"read")==0){
+                    hs=read();
+                    isEntryCorrect=true;
+                    isMessage=true;
+                }
+                else if(strcasecmp(buffer,"del")==0){
+                    hs=del();
+                    isEntryCorrect=true;
+                    isDel = true;
+                }
+                else if(strcasecmp(buffer,"quit")==0){
+                    isQuit = true;
+                    isEntryCorrect=true;
+                    continue;
+                }
+                else{
+                    cout<<">>Command not found\n";
+                    isEntryCorrect=false;
+                }
+            } else {
+                if(!isLogin) {
+                    cout << "You need to login before you can use the mailer!" << endl;
+                    isEntryCorrect = false;
+                }
+                
             }
 
 
-            
-            
             //if a suitable command is found
             if(isEntryCorrect){
                 
@@ -382,7 +441,15 @@ int main(int argc, char **argv){
                 else{
                     //either just prints out OK or ERR, or displays a subject list / Message
                     buffer[size] = '\0';
-                    if(isList){
+                    if(isLogin) {
+                        if(!printLogin(buffer)){
+                            fprintf(stderr, "<< Server error occured, abort\n");
+                            exit(EXIT_FAILURE);
+                        }
+                        loginSuccessful = true;
+                        isLogin = false;
+                    }
+                    else if(isList){
                         if(!printList(buffer)){
                             fprintf(stderr, "<< Server error occured, abort\n");
                             exit(EXIT_FAILURE);
@@ -407,7 +474,7 @@ int main(int argc, char **argv){
                 }
             }         
         }
-    }while (!isQuit);
+    } while (!isQuit);
     if (client_socket != -1){
       if (shutdown(client_socket, SHUT_RDWR) == -1){
 
