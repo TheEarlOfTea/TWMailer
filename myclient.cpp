@@ -428,7 +428,6 @@ int main(int argc, char **argv){
 
             //if a suitable command is found
             if(isEntryCorrect){
-                
                 //copies package from hs into buffer
                 strcpy(buffer,hs.c_str());
                 size=strlen(buffer);
