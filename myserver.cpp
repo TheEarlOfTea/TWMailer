@@ -32,6 +32,7 @@ int create_socket = -1;
 int new_socket = -1;
 using namespace std;
 namespace fs = std::filesystem;
+string sender = "";
 string clientIP = "";
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -236,7 +237,7 @@ void *clientCommunication(void *data, string folder)
       }
 
       buffer[size] = '\0';
-      printf("Message received: %s\n", buffer); // ignore error
+      // printf("Message received: %s\n", buffer); // ignore error
 
       /* first char of the buffer is the flag sent from the client */
       // char flag = buffer[0];
@@ -298,19 +299,17 @@ string login(string buffer)
    strcpy(buff, buffer.c_str());
    string username = getString(buffer);
    string password = removeString(buffer, username);
-
-   cout << "Username: " << username << "\nPassword: " << password << endl;
    
-   // LDAP STUFF
+   // LDAP
 
    /* prepare username */
-   /*
+   
    char ldapBindUser[256];
    sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
    printf("user set to: %s\n", ldapBindUser);
 
    /* prepare password */
-   /*
+   
    char ldapBindPassword[256];
    strcpy(ldapBindPassword, password.c_str());
    
@@ -318,7 +317,7 @@ string login(string buffer)
    int rc = 0; /* return code */
 
    /* set up LDAP connection */
-   /*
+   
    LDAP *ldapHandle;
    rc = ldap_initialize(&ldapHandle, ldapUri);
    if (rc != LDAP_SUCCESS) {
@@ -328,7 +327,7 @@ string login(string buffer)
    printf("Connected to LDAP server %s\n", ldapUri);
 
    /* set version options */
-   /*
+   
    rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
    if(rc != LDAP_OPT_SUCCESS) {
       fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
@@ -337,7 +336,7 @@ string login(string buffer)
    }
 
    /* start secure connection (initialize TLS) */
-   /*
+   
    rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
    if (rc != LDAP_SUCCESS) {
       fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
@@ -346,12 +345,12 @@ string login(string buffer)
    }
 
    /* bind credentials */
-   /*
+   
    BerValue bindCredentials;
    bindCredentials.bv_val = (char *)ldapBindPassword;
    bindCredentials.bv_len = strlen(ldapBindPassword);
    BerValue *servercredp; /* server's credentials */
-   /*
+   
    rc = ldap_sasl_bind_s(
        ldapHandle,
        ldapBindUser,
@@ -360,20 +359,15 @@ string login(string buffer)
        NULL,
        NULL,
        &servercredp);
-   if (rc != LDAP_SUCCESS)
-   {
-      fprintf(stderr, "LDAP bind error: %s\n", ldap_err2string(rc));
-      ldap_unbind_ext_s(ldapHandle, NULL, NULL);
-      return "ERR";
-   }
 
    /* free memory */
-   /*
    ldap_unbind_ext_s(ldapHandle, NULL, NULL);
-   */
 
-   /* TODO: if LDAP_SUCCESS set successfulLogin = true and return "OK" */
-   
+   if(rc == LDAP_SUCCESS) {
+      sender = username;
+      successfulLogin = true;
+      return "OK";
+   }
 
    if(clientIP.empty()) {
       cerr << "Couldn't access the client IP address" << endl;
@@ -410,8 +404,6 @@ string login(string buffer)
          line.erase(0, pos + delimiter.length());
       }
 
-      cout << "BLACKLIST: Username: " << un << " IP:" << ip << " Time: " << time << endl;
-
       if(stoi(time) + 60 > now) {
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
             blacklistFile.close();
@@ -440,7 +432,6 @@ string login(string buffer)
    /* check if this is the IP's/ username's third attempt at logging in and set them on the blacklist */
    int attemptCounter = 0;
    while(getline(loginLogFile, line)) {
-      cout << "line: " << line << endl;
       string un, ip, time;
       string delimiter = ";";
       
@@ -456,10 +447,6 @@ string login(string buffer)
          }
          line.erase(0, pos + delimiter.length());
       }
-
-      cout << "LOG: Username: " << un << " IP:" << ip << " Time: " << time << endl;
-
-      cout << "Time: " << time << "(" << stoi(time) << ") + 60 = " << (stoi(time) + 60) << endl;
 
       if(stoi(time) + 60 > now) {
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
@@ -479,8 +466,7 @@ string login(string buffer)
    blacklistFile.close();   
    loginLogFile.close();
 
-   successfulLogin = true;
-   return "OK";
+   return "ERR\nPlease try again.";
 
 }
 
