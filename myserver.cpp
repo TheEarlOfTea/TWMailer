@@ -479,6 +479,7 @@ string login(string buffer)
    blacklistFile.close();   
    loginLogFile.close();
 
+   successfulLogin = true;
    return "OK";
 
 }
