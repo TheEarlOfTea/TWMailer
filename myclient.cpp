@@ -199,10 +199,13 @@ namespace client_functions {
 
          if(strcmp(hs.c_str(), "OK") == 0) {
             cout << "<< Login Successful" << endl;
-        } else {
-            cout << "<< Please try again" << endl;
-        }
+            return true;
+        } else if(strcmp(hs.c_str(), "ERR") == 0) {
+            cerr << "A server-site error occured\n";
+            return false;
+        } 
 
+        cout << buffer << endl;
         return true;
 
     }
@@ -446,7 +449,9 @@ int main(int argc, char **argv){
                             fprintf(stderr, "<< Server error occured, abort\n");
                             exit(EXIT_FAILURE);
                         }
-                        loginSuccessful = true;
+                        if(strcmp(buffer, "OK") == 0) {
+                            loginSuccessful = true;
+                        }
                         isLogin = false;
                     }
                     else if(isList){
