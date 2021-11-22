@@ -1,5 +1,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
+#include <sys/file.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -18,7 +20,7 @@
 #define BUF 1024
 /* the number of files the user has received is stored in a file in their directory named numOfFiles */
 // #define PORT 6543
-#define SEPERATOR "\n"
+#define SEPERATOR '\n'
 #define MAX_NAME 8
 #define MAX_SUBJ 80
 
@@ -34,13 +36,14 @@ using namespace std;
 namespace fs = std::filesystem;
 string sender = "";
 string clientIP = "";
+pid_t childpid;
 
 ///////////////////////////////////////////////////////////////////////////////
 
 void *clientCommunication(void *data, string folder);
-string login(string buffer);
+string login(string buffer, string folder);
 bool receiveFromClient(string buffer, string folder);
-string list(string buffer, string folder);
+string list(string folder);
 string read(string buffer, string folder);
 bool deleteMessage(string buffer, string folder);
 
@@ -52,6 +55,8 @@ string getHighestFileNumber(string folder);
 string getString(string buffer);
 string removeString(string buffer, string s1);
 bool verifyStringLength(string string, int maxStringLength);
+bool lockFile(int fd);
+bool unlockFile(int fd);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -173,11 +178,29 @@ int main(int argc, char* argv[])
       printf("Client connected from %s:%d...\n",
              inet_ntoa(cliaddress.sin_addr),
              ntohs(cliaddress.sin_port));
-      clientIP = inet_ntoa(cliaddress.sin_addr);
-      clientCommunication(&new_socket, folder); // returnValue can be ignored
-      new_socket = -1;
 
+      /* child process */
+      if((childpid = fork()) == 0) {
+         close(create_socket);
+
+         clientIP = inet_ntoa(cliaddress.sin_addr);
+         clientCommunication(&new_socket, folder); // returnValue can be ignored
+         //new_socket = -1;
+
+         close(new_socket);
+         exit(EXIT_SUCCESS);
+      }
+
+      /* parent process works here */
+      close(new_socket);
       
+
+   }
+
+   while((childpid = waitpid(-1, NULL, WNOHANG))) {
+      if((childpid == -1) && (errno != EINTR)) {
+         break;
+      }
    }
 
    // frees the descriptor
@@ -249,27 +272,25 @@ void *clientCommunication(void *data, string folder)
       string response = ""; /* response to the client upon the given request */
 
       
-      if(strcasecmp(flag.c_str(), "login") == 0) {
-         response = login(bufferString);
+      if(strcasecmp(flag.c_str(), "LOGIN") == 0) {
+         response = login(bufferString, folder);
       }
       // TODO: change flags to full word
       if(successfulLogin) {
-         if (strcasecmp(flag.c_str(), "s") == 0) {
+         if (strcasecmp(flag.c_str(), "SEND") == 0) {
             response = receiveFromClient(bufferString, folder) ? "OK" : "ERR";
          } 
-         else if (strcasecmp(flag.c_str(), "l") == 0) {
-            response = list(bufferString, folder);
+         else if (strcasecmp(flag.c_str(), "LIST") == 0) {
+            response = list(folder);
          }
-         else if (strcasecmp(flag.c_str(), "r") == 0) {
-            response = read(buffer, folder);
+         else if (strcasecmp(flag.c_str(), "READ") == 0) {
+            response = read(bufferString, folder);
          }
-         else if (strcasecmp(flag.c_str(), "d") == 0) {
-            response = deleteMessage(buffer, folder) ? "OK" : "ERR";
+         else if (strcasecmp(flag.c_str(), "DEL") == 0) {
+            response = deleteMessage(bufferString, folder) ? "OK" : "ERR";
          } 
       }
       
-      
-
       if (send(*current_socket, response.c_str(), strlen(response.c_str()), 0) == -1)
       {
          perror("send answer failed");
@@ -293,7 +314,7 @@ void *clientCommunication(void *data, string folder)
    return NULL;
 }
 
-string login(string buffer)
+string login(string buffer, string folder)
 {
    char buff[1024];
    strcpy(buff, buffer.c_str());
@@ -366,6 +387,19 @@ string login(string buffer)
    if(rc == LDAP_SUCCESS) {
       sender = username;
       successfulLogin = true;
+
+      /* checks if receiver already has a folder for their messages */
+   try {
+      /* receiver does not have a folder */
+      string senderFolder = folder + "/" + sender;
+      if(!fs::exists(senderFolder)) { 
+         fs::create_directory(senderFolder);
+      }
+   } catch (fs::filesystem_error& error) {
+      cerr << error.what() << endl;
+      return "ERR";
+   }
+
       return "OK";
    }
 
@@ -380,7 +414,9 @@ string login(string buffer)
 
    time_t now = time(0);
 
-   blacklistFile.open("blacklist.txt");
+   int blacklistFile_fd = open("blacklist.txt", O_RDONLY);
+   lockFile(blacklistFile_fd);
+
    if(!blacklistFile) {
       cerr << "blacklist.txt couldn't be opened" << endl;
       return "ERR";
@@ -406,6 +442,7 @@ string login(string buffer)
 
       if(stoi(time) + 60 > now) {
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
+            unlockFile(blacklistFile_fd);
             blacklistFile.close();
             return "ERR\nYou have too many failed attempts, please try again later.";
          }
@@ -413,20 +450,27 @@ string login(string buffer)
 
    }
 
+   unlockFile(blacklistFile_fd);
    blacklistFile.close();
 
    /* write username & IP into loginLog */
 
+   int loginLogFile_fd = open("loginLog.txt", O_WRONLY);
+   lockFile(loginLogFile_fd);
    loginLogFile.open("loginLog.txt", ios_base::app);
    if(!loginLogFile) {
       cerr << "loginLog.txt couldn't be opened" << endl;
+      unlockFile(loginLogFile_fd);
       return "ERR";
    }
 
    loginLogFile << username << ";" << clientIP << ";" << now << endl;
 
+   unlockFile(loginLogFile_fd);
    loginLogFile.close();
 
+   loginLogFile_fd = open("loginLog.txt", O_RDONLY);
+   lockFile(loginLogFile_fd);
    loginLogFile.open("loginLog.txt");
 
    /* check if this is the IP's/ username's third attempt at logging in and set them on the blacklist */
@@ -452,9 +496,13 @@ string login(string buffer)
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
             attemptCounter++;
             if(attemptCounter == 3) {
-               blacklistFile.open("blacklist.txt", ios_base::app);
+               blacklistFile_fd = open("blacklist.txt", O_WRONLY);
+               lockFile(blacklistFile_fd);
+               blacklistFile.open("blacklist.txt", ios_base::app); 
                blacklistFile << username << ";" << clientIP << ";" << now << endl;
+               unlockFile(blacklistFile_fd);
                blacklistFile.close();   
+               unlockFile(loginLogFile_fd);
                loginLogFile.close();
                return "ERR\nYou have too many failed attempts, please try again later.";
             }
@@ -463,7 +511,9 @@ string login(string buffer)
 
    }
 
+   unlockFile(blacklistFile_fd);
    blacklistFile.close();   
+   unlockFile(loginLogFile_fd);
    loginLogFile.close();
 
    return "ERR\nPlease try again.";
@@ -481,17 +531,9 @@ string login(string buffer)
  */
 bool receiveFromClient(string buffer, string folder){
 
-   string sender, receiver, subject, message;
-
-   
-   buffer = removeString(buffer, "s"); /* remove flag at the beginning of the package */
-
-   sender = getString(buffer); /* get sender */
-   if(!verifyStringLength(sender, MAX_NAME)) {
-      return false;
-   }
-   buffer = removeString(buffer, sender);
-   
+   string receiver, subject, message;
+      
+   cout << "buffer: " << buffer << endl;
    receiver = getString(buffer); /* get receiver */
    if(!verifyStringLength(receiver, MAX_NAME)) {
       return false;
@@ -505,6 +547,8 @@ bool receiveFromClient(string buffer, string folder){
    buffer = removeString(buffer, subject);
    
    message = buffer; /* get message */
+
+   cout << "Receiver: " << receiver << endl << "Subject: " << subject << endl << "Message: " << message << endl;
 
    string receiverFolder = folder + "/" + receiver;
 
@@ -534,7 +578,7 @@ bool receiveFromClient(string buffer, string folder){
    /* write sender(\n)receiver(\n)subject(\n)message into file */
    outfile.open(newFile.c_str()); 
    if(!outfile){
-      cerr << "counterFile couldn't be opened" << endl;
+      cerr << "newFile couldn't be opened" << endl;
       return false;
    }
    outfile << sender << endl << receiver << endl << subject << endl << message;
@@ -548,20 +592,16 @@ bool receiveFromClient(string buffer, string folder){
  * @brief Responsible for LIST request from the client. Gets username from client request, opens username's directory,
  * iterates over messages in the directory and gets the subjects from the messages
  * 
- * @param buffer string received from client in the form of "l;username"
  * @param folder given directory where messages should be persisted
  * @return "ERR" if user/file not found, otherwise: "OK;numOfFiles;subject1;subject2;...;subjectn" 
  */
-string list(string buffer, string folder)
+string list(string folder)
 {
 
-   buffer = removeString(buffer, "l"); /* remove flag at the beginning of the package */
-
-   string username = buffer; /* get username */
-   if(!verifyStringLength(username, MAX_NAME)) {
+   if(!verifyStringLength(sender, MAX_NAME)) {
       return "ERR";
    }
-   string userFolder = folder + "/" + username; /* get username's folder */
+   string userFolder = folder + "/" + sender; /* get username's folder */
    
    try {
       if(!fs::exists(userFolder)){ /* username doesn't have a folder -> return 0 */
@@ -611,8 +651,11 @@ string list(string buffer, string folder)
       cerr << error.what() << endl;
       return "ERR";
    }
-   cout << "list: " << helperString << endl;
-   return "OK;" + helperString;
+   cout << "Helper string: " << helperString << endl;
+   string returnString = "OK\n";
+   returnString = returnString + helperString;
+   cout << returnString << endl;
+   return returnString;
 }
 
 /**
@@ -625,19 +668,11 @@ string list(string buffer, string folder)
  */
 string read(string buffer, string folder)
 {
-
-   buffer = removeString(buffer, "r"); /* remove flag at the beginning of the package */
-
-   string username, messageNumber;
-
-   username = getString(buffer);
-   if(!verifyStringLength(username, MAX_NAME)) {
-      return "ERR";
-   }
-   buffer = removeString(buffer, username);
+   string messageNumber;
 
    messageNumber = buffer;
-   string usernameFolder = folder + "/" + username;
+   cout << "read, message number: " << messageNumber << endl;
+   string usernameFolder = folder + "/" + sender;
    string searchedFileDirectory;
    int counter = 0;
    for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
@@ -667,11 +702,6 @@ string read(string buffer, string folder)
 
    ifstream file(searchedFileDirectory); /* copy entire content of searched File into message */
    if(file.is_open()) {
-      for(int i = 0; i < 3; i++) {
-         getline(file, line);
-         message += line;
-         message += ";";
-      }
       while(!file.eof()) { 
          getline(file, line);
          message += line;
@@ -683,7 +713,7 @@ string read(string buffer, string folder)
    }
    file.close();
    
-   return "OK;" + message;
+   return "OK\n" + message;
 
 }
 
@@ -697,18 +727,11 @@ string read(string buffer, string folder)
  */
 bool deleteMessage(string buffer, string folder)
 {
-   buffer = removeString(buffer, "d"); /* remove flag at the beginning of the package */
 
-   string username, messageNumber;
-
-   username = getString(buffer);
-   if(!verifyStringLength(username, MAX_NAME)) {
-      return false;
-   }
-   buffer = removeString(buffer, username);
+   string messageNumber;
 
    messageNumber = buffer;
-   string usernameFolder = folder + "/" + username;
+   string usernameFolder = folder + "/" + sender;
    string searchedFileDirectory;
    int counter = 0;
    for (fs::directory_entry e: fs::directory_iterator(usernameFolder)){
@@ -857,4 +880,31 @@ string removeString(string buffer, string s1)
 bool verifyStringLength(string string, int maxStringLength)
 {
    return (string.length() <= (unsigned)maxStringLength);
+}
+
+bool lockFile(int fd) {
+   if(flock(fd, LOCK_SH | LOCK_NB)) {
+      if(errno == EWOULDBLOCK) { /* File is locked, let's wait */
+         if(flock(fd, LOCK_SH) == -1 ){
+            cerr << "Failed to lock the file " << endl;
+            close(fd);
+            return false;
+         }
+      } else {
+         cerr << "Failed to lock the file " << endl;
+         close(fd);
+         return false;
+      }
+   }
+   return true;
+}
+
+bool unlockFile(int fd) {
+   if(flock(fd, LOCK_UN) == -1) {
+      cerr << "Failed to unlock the file!" << endl;
+      close(fd);
+      return false;
+   }
+   close(fd);
+   return true;
 }
