@@ -17,6 +17,7 @@
 
 using namespace std;
 bool loginSuccessful = false;
+string login_username;
 
 //functions and variables in auxillary are used in namespace client_functions
 namespace auxilliary{
@@ -98,6 +99,7 @@ namespace client_functions {
         getline(cin, password);
 
         package = "LOGIN\n" + username + '\n' + password;
+        login_username=username;
         
         return package;
     }
@@ -107,12 +109,7 @@ namespace client_functions {
      * @return a string in the format "s;$sender;$receiver;$subject;$message"
      */
     string send(){
-        string sender, receiver, subject, message, hs, package;
-        do{
-            cout<<"<Sender>: ";
-            getline(cin,sender);
-
-        }while(!isNameOk(sender));
+        string receiver, subject, message, hs, package;
         do{
             cout<<"<Receiver>: ";
             getline(cin,receiver);
@@ -133,7 +130,7 @@ namespace client_functions {
             }while(hs!=".");
         }while(!isMessageOk(message));
 
-        package = "s" + seperator + sender + seperator + receiver 
+        package = "s" + seperator + login_username + seperator + receiver 
                     + seperator + subject + seperator + message;
         return package;
     }
@@ -293,7 +290,6 @@ int main(int argc, char **argv){
     bool isEntryCorrect;
     bool isLogin = false;
     bool isSend = false;
-    bool isQuit = false;
     bool isList = false;
     bool isMessage = false;
     bool isDel = false;
@@ -365,6 +361,22 @@ int main(int argc, char **argv){
                 --size;
                 buffer[size] = 0;
             }
+            if(strcasecmp(buffer, "quit")==0){
+                if (client_socket != -1){
+                    if (shutdown(client_socket, SHUT_RDWR) == -1){
+
+                        perror("shutdown create_socket"); 
+                    }
+                    if (close(client_socket) == -1){
+
+                        perror("close create_socket");
+                    }
+                    client_socket = -1;
+                }
+
+                return EXIT_SUCCESS;
+
+            }
 
             if(strcasecmp(buffer, "login") == 0) {
                 if(loginSuccessful) {
@@ -400,11 +412,6 @@ int main(int argc, char **argv){
                     hs=del();
                     isEntryCorrect=true;
                     isDel = true;
-                }
-                else if(strcasecmp(buffer,"quit")==0){
-                    isQuit = true;
-                    isEntryCorrect=true;
-                    continue;
                 }
                 else{
                     cout<<">>Command not found\n";
@@ -479,20 +486,7 @@ int main(int argc, char **argv){
                 }
             }         
         }
-    } while (!isQuit);
-    if (client_socket != -1){
-      if (shutdown(client_socket, SHUT_RDWR) == -1){
-
-         perror("shutdown create_socket"); 
-      }
-      if (close(client_socket) == -1){
-
-         perror("close create_socket");
-      }
-      client_socket = -1;
-   }
-
-   return EXIT_SUCCESS;
+    } while (true);
 
     
 }
