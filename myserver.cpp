@@ -408,22 +408,16 @@ string login(string buffer, string folder)
       return "ERR";
    }
 
-   fstream blacklistFile;
+   fstream blacklist;
    fstream loginLogFile;
    string line;
 
    time_t now = time(0);
 
-   int blacklistFile_fd = open("blacklist.txt", O_RDONLY);
-   lockFile(blacklistFile_fd);
-
-   if(!blacklistFile) {
-      cerr << "blacklist.txt couldn't be opened" << endl;
-      return "ERR";
-   }
+   blacklist.open("blacklist.txt", ios::in);
 
    /* check if username / IP is on the blacklist */
-   while(getline(blacklistFile, line)) {
+   while(getline(blacklist,line)) {
       string un, ip, time;
       string delimiter = ";";
       
@@ -442,36 +436,29 @@ string login(string buffer, string folder)
 
       if(stoi(time) + 60 > now) {
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
-            unlockFile(blacklistFile_fd);
-            blacklistFile.close();
+            blacklist.close();
             return "ERR\nYou have too many failed attempts, please try again later.";
          }
       }
 
    }
 
-   unlockFile(blacklistFile_fd);
-   blacklistFile.close();
+   blacklist.close();
 
    /* write username & IP into loginLog */
 
-   int loginLogFile_fd = open("loginLog.txt", O_WRONLY);
-   lockFile(loginLogFile_fd);
+   blacklist.open("loginLog.txt", ios::app);
    loginLogFile.open("loginLog.txt", ios_base::app);
    if(!loginLogFile) {
       cerr << "loginLog.txt couldn't be opened" << endl;
-      unlockFile(loginLogFile_fd);
       return "ERR";
    }
 
    loginLogFile << username << ";" << clientIP << ";" << now << endl;
 
-   unlockFile(loginLogFile_fd);
    loginLogFile.close();
 
-   loginLogFile_fd = open("loginLog.txt", O_RDONLY);
-   lockFile(loginLogFile_fd);
-   loginLogFile.open("loginLog.txt");
+   loginLogFile.open("loginLog.txt", ios::in);
 
    /* check if this is the IP's/ username's third attempt at logging in and set them on the blacklist */
    int attemptCounter = 0;
@@ -496,13 +483,9 @@ string login(string buffer, string folder)
          if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
             attemptCounter++;
             if(attemptCounter == 3) {
-               blacklistFile_fd = open("blacklist.txt", O_WRONLY);
-               lockFile(blacklistFile_fd);
-               blacklistFile.open("blacklist.txt", ios_base::app); 
-               blacklistFile << username << ";" << clientIP << ";" << now << endl;
-               unlockFile(blacklistFile_fd);
-               blacklistFile.close();   
-               unlockFile(loginLogFile_fd);
+               blacklist.open("blacklist.txt", ios_base::app); 
+               blacklist << username << ";" << clientIP << ";" << now << endl;
+               blacklist.close();   
                loginLogFile.close();
                return "ERR\nYou have too many failed attempts, please try again later.";
             }
@@ -511,9 +494,7 @@ string login(string buffer, string folder)
 
    }
 
-   unlockFile(blacklistFile_fd);
-   blacklistFile.close();   
-   unlockFile(loginLogFile_fd);
+   blacklist.close();   
    loginLogFile.close();
 
    return "ERR\nPlease try again.";

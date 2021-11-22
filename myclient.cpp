@@ -238,7 +238,7 @@ namespace client_functions {
             cout << "<Sender> " << strtok(NULL, "\n") << "\n";
             cout << "<Receiver> " << strtok(NULL, "\n") << "\n";
             cout << "<Subject> " << strtok(NULL,"\n") << "\n";
-            cout << "<Message>\n" << strtok(NULL,"\n") << "\n";
+            cout << "<Message>\n" << strtok(NULL,"") << "\n";
             return true;;
         }
         cout << "<< ERR" << endl;
