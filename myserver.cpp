@@ -24,6 +24,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+const char *ldapUri = "ldap://ldap.technikum-wien.at:389";
+const int ldapVersion = LDAP_VERSION3;
 bool successfulLogin = false;
 int abortRequested = 0;
 int create_socket = -1;
@@ -299,33 +301,186 @@ string login(string buffer)
 
    cout << "Username: " << username << "\nPassword: " << password << endl;
    
-   // TODO: add LDAP stuff here
-   // TODO: registering?
+   // LDAP STUFF
+
+   /* prepare username */
+   /*
+   char ldapBindUser[256];
+   sprintf(ldapBindUser, "uid=%s,ou=people,dc=technikum-wien,dc=at", username.c_str());
+   printf("user set to: %s\n", ldapBindUser);
+
+   /* prepare password */
+   /*
+   char ldapBindPassword[256];
+   strcpy(ldapBindPassword, password.c_str());
+   
+
+   int rc = 0; /* return code */
+
+   /* set up LDAP connection */
+   /*
+   LDAP *ldapHandle;
+   rc = ldap_initialize(&ldapHandle, ldapUri);
+   if (rc != LDAP_SUCCESS) {
+      fprintf(stderr, "ldap_init failed\n");
+      return "ERR";
+   }
+   printf("Connected to LDAP server %s\n", ldapUri);
+
+   /* set version options */
+   /*
+   rc = ldap_set_option(ldapHandle, LDAP_OPT_PROTOCOL_VERSION, &ldapVersion);
+   if(rc != LDAP_OPT_SUCCESS) {
+      fprintf(stderr, "ldap_set_option(PROTOCOL_VERSION): %s\n", ldap_err2string(rc));
+      ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+      return "ERR";
+   }
+
+   /* start secure connection (initialize TLS) */
+   /*
+   rc = ldap_start_tls_s(ldapHandle, NULL, NULL);
+   if (rc != LDAP_SUCCESS) {
+      fprintf(stderr, "ldap_start_tls_s(): %s\n", ldap_err2string(rc));
+      ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+      return "ERR";
+   }
+
+   /* bind credentials */
+   /*
+   BerValue bindCredentials;
+   bindCredentials.bv_val = (char *)ldapBindPassword;
+   bindCredentials.bv_len = strlen(ldapBindPassword);
+   BerValue *servercredp; /* server's credentials */
+   /*
+   rc = ldap_sasl_bind_s(
+       ldapHandle,
+       ldapBindUser,
+       LDAP_SASL_SIMPLE,
+       &bindCredentials,
+       NULL,
+       NULL,
+       &servercredp);
+   if (rc != LDAP_SUCCESS)
+   {
+      fprintf(stderr, "LDAP bind error: %s\n", ldap_err2string(rc));
+      ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+      return "ERR";
+   }
+
+   /* free memory */
+   /*
+   ldap_unbind_ext_s(ldapHandle, NULL, NULL);
+   */
+
+   /* TODO: if LDAP_SUCCESS set successfulLogin = true and return "OK" */
+   
 
    if(clientIP.empty()) {
       cerr << "Couldn't access the client IP address" << endl;
       return "ERR";
    }
 
-   ofstream outfile;
+   fstream blacklistFile;
+   fstream loginLogFile;
+   string line;
 
-   outfile.open("blacklist.txt", ios_base::app);
-   if(!outfile) {
+   time_t now = time(0);
+
+   blacklistFile.open("blacklist.txt");
+   if(!blacklistFile) {
       cerr << "blacklist.txt couldn't be opened" << endl;
       return "ERR";
    }
 
-   time_t now = time(0);
+   /* check if username / IP is on the blacklist */
+   while(getline(blacklistFile, line)) {
+      string un, ip, time;
+      string delimiter = ";";
+      
+      for(int i = 0; i < 3; i++) {
+         size_t pos = line.find(delimiter);
+         string token = line.substr(0, pos);
+         if(i == 0) {
+            un = token;
+         } else if (i == 1) {
+            ip = token;
+         } else if (i == 2) {
+            time = token;
+         }
+         line.erase(0, pos + delimiter.length());
+      }
 
-   tm *ltm = localtime(&now);
+      cout << "BLACKLIST: Username: " << un << " IP:" << ip << " Time: " << time << endl;
 
-   outfile << username << ";" << now << endl;
-   
-   cout << "Current second " << now << endl;
+      if(stoi(time) + 60 > now) {
+         if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
+            blacklistFile.close();
+            return "ERR\nYou have too many failed attempts, please try again later.";
+         }
+      }
 
-   outfile.close();   
+   }
+
+   blacklistFile.close();
+
+   /* write username & IP into loginLog */
+
+   loginLogFile.open("loginLog.txt", ios_base::app);
+   if(!loginLogFile) {
+      cerr << "loginLog.txt couldn't be opened" << endl;
+      return "ERR";
+   }
+
+   loginLogFile << username << ";" << clientIP << ";" << now << endl;
+
+   loginLogFile.close();
+
+   loginLogFile.open("loginLog.txt");
+
+   /* check if this is the IP's/ username's third attempt at logging in and set them on the blacklist */
+   int attemptCounter = 0;
+   while(getline(loginLogFile, line)) {
+      cout << "line: " << line << endl;
+      string un, ip, time;
+      string delimiter = ";";
+      
+      for(int i = 0; i < 3; i++) {
+         size_t pos = line.find(delimiter);
+         string token = line.substr(0, pos);
+         if(i == 0) {
+            un = token;
+         } else if (i == 1) {
+            ip = token;
+         } else if (i == 2) {
+            time = token;
+         }
+         line.erase(0, pos + delimiter.length());
+      }
+
+      cout << "LOG: Username: " << un << " IP:" << ip << " Time: " << time << endl;
+
+      cout << "Time: " << time << "(" << stoi(time) << ") + 60 = " << (stoi(time) + 60) << endl;
+
+      if(stoi(time) + 60 > now) {
+         if(strcmp(username.c_str(), un.c_str()) == 0 || strcmp(clientIP.c_str(), ip.c_str()) == 0) {
+            attemptCounter++;
+            if(attemptCounter == 3) {
+               blacklistFile.open("blacklist.txt", ios_base::app);
+               blacklistFile << username << ";" << clientIP << ";" << now << endl;
+               blacklistFile.close();   
+               loginLogFile.close();
+               return "ERR\nYou have too many failed attempts, please try again later.";
+            }
+         }
+      }
+
+   }
+
+   blacklistFile.close();   
+   loginLogFile.close();
 
    return "OK";
+
 }
 
 /**
