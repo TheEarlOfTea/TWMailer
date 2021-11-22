@@ -7,12 +7,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
+#include <curses.h>
 
 #define PORT 6543
 #define MAX_SUBJ 80;
 #define BUF 1024;
 #define MAX_NAME 8;
-#define SEPERATOR ";";
+#define SEPERATOR "\n";
 #define CORRECT_SERVER_RESPONSE "OK";
 
 using namespace std;
@@ -96,10 +97,24 @@ namespace client_functions {
         } while(!isNameOk(username));
 
         cout << "<Password>: ";
-        getline(cin, password);
+
+        /* Password masking */
+
+        initscr(); // enable ncurses
+        
+        noecho(); // disable character echoing
+
+        char passwordBuff[64];
+        getnstr(passwordBuff, sizeof(passwordBuff));
+
+        echo(); // enable character echoing
+        getch(); // wait for a keypress
+        endwin(); //disable ncurses
+
+        password = passwordBuff;
 
         package = "LOGIN\n" + username + '\n' + password;
-        login_username=username;
+        login_username = username;
         
         return package;
     }
@@ -428,6 +443,7 @@ int main(int argc, char **argv){
 
             //if a suitable command is found
             if(isEntryCorrect){
+                
                 //copies package from hs into buffer
                 strcpy(buffer,hs.c_str());
                 size=strlen(buffer);
