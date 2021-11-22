@@ -38,4 +38,4 @@ clean:
 	${CC} ${CFLAGS} -o bin/twmailer-server obj/myserver.o -lldap -llber
 
 ./bin/client: ./obj/myclient.o
-	${CC} ${CFLAGS} -o bin/twmailer-client obj/myclient.o -lldap -llber -lcurses
+	${CC} ${CFLAGS} -o bin/twmailer-client obj/myclient.o -lldap -llber
