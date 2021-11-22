@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <iostream>
-#include <curses.h>
 
 #define PORT 6543
 #define MAX_SUBJ 80;
@@ -96,22 +95,7 @@ namespace client_functions {
 
         } while(!isNameOk(username));
 
-        cout << "<Password>: ";
-
-        /* Password masking */
-
-        initscr(); // enable ncurses
-        
-        noecho(); // disable character echoing
-
-        char passwordBuff[64];
-        getnstr(passwordBuff, sizeof(passwordBuff));
-
-        echo(); // enable character echoing
-        getch(); // wait for a keypress
-        endwin(); //disable ncurses
-
-        password = passwordBuff;
+        password = getpass("<Password>: ");
 
         package = "LOGIN\n" + username + '\n' + password;
         login_username = username;
@@ -121,90 +105,80 @@ namespace client_functions {
 
     /**
      * @brief creates a package, that sends the server a message
-     * @return a string in the format "s;$sender;$receiver;$subject;$message"
+     * @return a string in the format "SEND\n$receiver\n$subject\n$message"
      */
-    string send(){
+    string send()
+    {
         string receiver, subject, message, hs, package;
-        do{
-            cout<<"<Receiver>: ";
-            getline(cin,receiver);
-        }while(!isNameOk(receiver));
-        do{
-            cout<<"<Subject>: ";
-            getline(cin,subject);
-        }while(!isSubjectOk(subject));
-        do{
-            cout<<"<Message>:\n";
-            do{
-                hs="";
+        do {
+            cout << "<Receiver>: ";
+            getline(cin, receiver);
+        } while(!isNameOk(receiver));
+        do {
+            cout << "<Subject>: ";
+            getline(cin, subject);
+        } while(!isSubjectOk(subject));
+        do {
+            cout << "<Message>:\n";
+            do {
+                hs = "";
                 getline(cin, hs);
                 if(hs!="."){
-                    message+=hs;
-                    message+="\n";
+                    message += hs;
+                    message += "\n";
                 }
-            }while(hs!=".");
-        }while(!isMessageOk(message));
+            } while(hs != ".");
+        } while(!isMessageOk(message));
 
-        package = "s" + seperator + login_username + seperator + receiver 
+        package = "SEND" + seperator + receiver 
                     + seperator + subject + seperator + message;
         return package;
     }
     /**
      * @brief creates package, that asks the server for all messages of a user
-     * @return a string in the format "l;$username"
+     * @return a string in the format "LIST"
      */
     string list(){
-        string username, package;
-        do{
-            cout<<"<Username>: ";
-            getline(cin,username);
-        }while(!isNameOk(username));
-
-        package="l"+seperator+username;
+        string package = "LIST" + seperator;
         return package;
     }
 
     /**
      * @brief creates package, that asks the server for a specified message of user
-     * @return a string in the format "r;$username;$msg_number"
+     * @return a string in the format "READ\n<message number>"
      */
-    string read(){
-        string username, msg_number, package;
+    string read()
+    {
+        string msg_number, package;
         do{
-            cout<<"<Username>: ";
-            getline(cin, username);
-        }while(!isNameOk(username));
-        do{
-            cout<<"<Message-Number>: ";
+            cout << "<Message-Number>: ";
             getline(cin, msg_number);
         }while(!isNumberOk(msg_number));
 
-        package="r"+seperator+username+seperator+msg_number;
+        package = "READ" + seperator + msg_number;
         return package;
 
     }
 
     /**
      * @brief creates package, that asks the server to delete a specified message of a user
-     * @return a string in the format "d;$username;$msg_number"
+     * @return a string in the format "DEL\n<$msg_number>"
      */
-    string del(){
-        string username, package, msg_number;
-        do{
-            cout<<"<Username>: ";
-            getline(cin, username);
-        }while(!isNameOk(username));
-        do{
-            cout<<"<Message-Number>: ";
+    string del()
+    {
+        string package, msg_number;
+        do {
+            cout << "<Message-Number>: ";
             getline(cin, msg_number);
-        }while(!isNumberOk(msg_number));
+        } while(!isNumberOk(msg_number));
         
-        package="d"+seperator+username+seperator+msg_number;
+        package = "DEL" + seperator + msg_number;
         return package;
     }
 
 
-    bool printLogin(string s) {
+    bool printLogin(string s) 
+    {
         char buffer[1024];
         strcpy(buffer, s.c_str());
         string hs = strtok(buffer, ";");
@@ -229,17 +203,18 @@ namespace client_functions {
      * @param s string of format "OK;$NrOfSubjects;$Subject1;$Subject2;...;$SubjectN"
      * @return returns true on sucess or false on server-site error
      **/
-    bool printList(string s){
+    bool printList(string s)
+    {
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
-        string hs = strtok(buffer, ";");
+        string hs = strtok(buffer, "\n");
         //prints Subject list
         if(strcmp(hs.c_str(), "OK") == 0) {
-            hs = strtok(NULL,";");
+            hs = strtok(NULL,"\n");
             cout << "<< " << hs << endl;
             for(int i = 1; i <= stoi(hs); i++) {
-                printf("<< <Message-Nr.>%i <Subject> %s\n", i, strtok(NULL,";"));
+                printf("<< <Message-Nr.>%i <Subject> %s\n", i, strtok(NULL,"\n"));
             }
             return true;
         }
@@ -256,14 +231,14 @@ namespace client_functions {
         //cuts OK from string
         char buffer[1024];
         strcpy(buffer, s.c_str());
-        string hs = strtok(buffer, ";");
+        string hs = strtok(buffer, "\n");
         cout << "<< " << hs << "\n";
         //prints Message
         if(strcmp(hs.c_str(),"OK")==0){
-            cout << "<Sender> " << strtok(NULL,";") << "\n";
-            cout << "<Receiver> " << strtok(NULL,";") << "\n";
-            cout << "<Subject> " << strtok(NULL,";") << "\n";
-            cout << "<Message>\n" << strtok(NULL,";") << "\n";
+            cout << "<Sender> " << strtok(NULL, "\n") << "\n";
+            cout << "<Receiver> " << strtok(NULL, "\n") << "\n";
+            cout << "<Subject> " << strtok(NULL,"\n") << "\n";
+            cout << "<Message>\n" << strtok(NULL,"\n") << "\n";
             return true;;
         }
         cout << "<< ERR" << endl;
@@ -419,18 +394,18 @@ int main(int argc, char **argv){
                     isList=true;
                 }
                 else if(strcasecmp(buffer,"read")==0){
-                    hs=read();
+                    hs = read();
                     isEntryCorrect=true;
                     isMessage=true;
                 }
-                else if(strcasecmp(buffer,"del")==0){
-                    hs=del();
-                    isEntryCorrect=true;
+                else if(strcasecmp(buffer, "del") == 0){
+                    hs = del();
+                    isEntryCorrect = true;
                     isDel = true;
                 }
                 else{
-                    cout<<">>Command not found\n";
-                    isEntryCorrect=false;
+                    cout << ">>Command not found\n";
+                    isEntryCorrect = false;
                 }
             } else {
                 if(!isLogin) {
